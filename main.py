@@ -1,5 +1,6 @@
 import time
 import torch
+from typing import Optional
 
 from args import Args
 from logger import Logger
@@ -10,7 +11,9 @@ from minigrid.environment import MultiGridEnv
 from utils import print_info
 
 
-def train(env, agents, network, logger, args):
+def train(
+    env: MultiGridEnv, agents: list[Agent], network: GR_QNetwork, logger: Optional[Logger], args: Args
+) -> torch.Tensor:
     training_start_time = time.time()
 
     progress = 0
@@ -47,19 +50,37 @@ def train(env, agents, network, logger, args):
 
             if args.debug:
                 for i in range(batch_size):
-                    print_info(agent_ids[i], obs_batch[i], node_obs_batch[i], adj_batch[i], 
-                            actions[i], rewards[i], next_obs_batch[i], next_node_obs_batch[i], 
-                            next_adj_batch[i], dones[i])
-          
+                    print_info(
+                        agent_ids[i],
+                        obs_batch[i],
+                        node_obs_batch[i],
+                        adj_batch[i],
+                        actions[i],
+                        rewards[i],
+                        next_obs_batch[i],
+                        next_node_obs_batch[i],
+                        next_adj_batch[i],
+                        dones[i],
+                    )
+
             # Process all experiences in one batch
-            loss = network.step(agent_ids, obs_batch, node_obs_batch, adj_batch, 
-                             actions, rewards, next_obs_batch, next_node_obs_batch, 
-                             next_adj_batch, dones)
-           
+            loss = network.step(
+                agent_ids,
+                obs_batch,
+                node_obs_batch,
+                adj_batch,
+                actions,
+                rewards,
+                next_obs_batch,
+                next_node_obs_batch,
+                next_adj_batch,
+                dones,
+            )
+
             if loss is not None and step_count > 10000:
                 losses.append(loss.cpu().item())
                 torch.cuda.empty_cache()
-                       
+
             # Update observations
             scores += rewards
             obs_batch = next_obs_batch
@@ -83,56 +104,62 @@ def train(env, agents, network, logger, args):
         batch_scores = scores.sum()
         total_scores.append(batch_scores.item())
         steps_per_episode.append(step)
-       
+
         # Calculate averages
         if logger:
             avg_rewards = torch.tensor(list(total_scores), device=args.device, dtype=torch.float32).mean().item()
             avg_steps = torch.tensor(list(steps_per_episode), device=args.device, dtype=torch.float32).mean().item()
-            avg_loss = torch.tensor(list(losses), device=args.device, dtype=torch.float32).mean().item() if losses else 0.0
+            avg_loss = (
+                torch.tensor(list(losses), device=args.device, dtype=torch.float32).mean().item() if losses else 0.0
+            )
             avg_seen = torch.tensor(list(seen_percentages), device=args.device, dtype=torch.float32).mean().item()
             steps_per_second = step_count / total_training_time
-           
+
             logger.log_metrics(
-               total_steps=step_count,
-               episodes=episode_count,
-               epsilon=eps,
-               average_rewards=avg_rewards,
-               average_steps_per_episode=avg_steps,
-               average_loss=avg_loss,
-               goals_collected=info.get("goals_collected", 0),
-               goals_percentage=info.get("goals_percentage", 0),
-               seen_percentage=avg_seen,
-               episode_duration=episode_time,
-               episode_duration_minutes=episode_time / 60,
-               total_training_time=total_training_time,
-               total_training_time_minutes=total_training_time / 60,
-               total_training_time_hours=total_training_time / 3600,
-               steps_per_second=steps_per_second
-           )
+                total_steps=step_count,
+                episodes=episode_count,
+                epsilon=eps,
+                average_rewards=avg_rewards,
+                average_steps_per_episode=avg_steps,
+                average_loss=avg_loss,
+                goals_collected=info.get("goals_collected", 0),
+                goals_percentage=info.get("goals_percentage", 0),
+                seen_percentage=avg_seen,
+                episode_duration=episode_time,
+                episode_duration_minutes=episode_time / 60,
+                total_training_time=total_training_time,
+                total_training_time_minutes=total_training_time / 60,
+                total_training_time_hours=total_training_time / 3600,
+                steps_per_second=steps_per_second,
+            )
         else:
-           # Calculate only necessary metrics for progress display
-           avg_rewards = torch.tensor(list(total_scores), device=args.device, dtype=torch.float32).mean().item()
-           avg_seen = torch.tensor(list(seen_percentages), device=args.device, dtype=torch.float32).mean().item()
-       
+            # Calculate only necessary metrics for progress display
+            avg_rewards = torch.tensor(list(total_scores), device=args.device, dtype=torch.float32).mean().item()
+            avg_seen = torch.tensor(list(seen_percentages), device=args.device, dtype=torch.float32).mean().item()
+
         # Progress tracking and model saving
         current_progress = round((step_count / args.total_steps) * 100)
-       
+
         if current_progress != progress:
-           print(f'\r{current_progress}% | Eps: {eps:.2f} \tAvg Score: {avg_rewards:.2f} \tAvg Seen: {avg_seen:.2f}% | Time: {total_training_time/3600:.2f}h')
-           progress = current_progress
-           torch.save(network.qnetwork_local.state_dict(), f'{args.title}.pt')
+            print(
+                f"\r{current_progress}% | Eps: {eps:.2f} \tAvg Score: {avg_rewards:.2f} "
+                f"\tAvg Seen: {avg_seen:.2f}% | Time: {total_training_time / 3600:.2f}h"
+            )
+            progress = current_progress
+            torch.save(network.qnetwork_local.state_dict(), f"{args.title}.pt")
 
     # Save the learned policy
-    torch.save(network.qnetwork_local.state_dict(), f'{args.title}.pt')
+    torch.save(network.qnetwork_local.state_dict(), f"{args.title}.pt")
     return scores
 
-def main():
+
+def main() -> None:
     # Settings & Controls
     args = Args()
     agents = [Agent(id=i, args=args) for i in range(args.num_agents)]
     env = MultiGridEnv(args, agents)
     network = GR_QNetwork(args)
-    
+
     if args.logger:
         logger = Logger(args)
     else:
@@ -143,8 +170,10 @@ def main():
         _ = train(env, agents, network, logger, args)
 
     # Close Environment
-    if args.logger: logger.close()
+    if args.logger:
+        logger.close()
     env.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

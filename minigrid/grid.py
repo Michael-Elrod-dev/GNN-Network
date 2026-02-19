@@ -8,7 +8,8 @@ from minigrid.rendering import downsample, highlight_img, fill_coords, point_in_
 
 class Grid:
     tile_cache: dict[tuple[Any, ...], Any] = {}
-    def __init__(self, width: int, height: int):
+
+    def __init__(self, width: int, height: int) -> None:
         assert width >= 3
         assert height >= 3
         self.width = width
@@ -16,20 +17,20 @@ class Grid:
         self.grid = [None] * (width * height)
         self.agent_grid = [None] * (width * height)
 
-    def set(self, i, j, v):
-        assert (0 <= i < self.width), f"column index {i} outside of grid of width {self.width}"
-        assert (0 <= j < self.height), f"row index {j} outside of grid of height {self.height}"
+    def set(self, i: int, j: int, v) -> None:
+        assert 0 <= i < self.width, f"column index {i} outside of grid of width {self.width}"
+        assert 0 <= j < self.height, f"row index {j} outside of grid of height {self.height}"
         self.grid[j * self.width + i] = v
 
-    def get(self, i: int, j: int):
+    def get(self, i: int, j: int) -> Any:
         assert 0 <= i <= self.width
         assert 0 <= j <= self.height
         assert self.grid is not None
         return self.grid[j * self.width + i]
 
-    def set_agent(self, i, j, v):
-        assert (0 <= i < self.width), f"column index {j} outside of grid of width {self.width}"
-        assert (0 <= j < self.height), f"row index {j} outside of grid of height {self.height}"
+    def set_agent(self, i: int, j: int, v) -> None:
+        assert 0 <= i < self.width, f"column index {j} outside of grid of width {self.width}"
+        assert 0 <= j < self.height, f"row index {j} outside of grid of height {self.height}"
         if v is None:
             self.agent_grid[j * self.width + i] = None
         else:
@@ -38,32 +39,32 @@ class Grid:
             else:
                 self.agent_grid[j * self.width + i].append(v)
 
-    def get_agent(self, i, j):
-        assert (0 <= i < self.width), f"column index {j} outside of grid of width {self.width}"
-        assert (0 <= j < self.height), f"row index {j} outside of grid of height {self.height}"
+    def get_agent(self, i: int, j: int) -> list | None:
+        assert 0 <= i < self.width, f"column index {j} outside of grid of width {self.width}"
+        assert 0 <= j < self.height, f"row index {j} outside of grid of height {self.height}"
         assert self.agent_grid is not None
         return self.agent_grid[j * self.width + i]
 
-    def horz_wall(self, x, y, length=None,obj_type=Wall):
+    def horz_wall(self, x: int, y: int, length: int | None = None, obj_type=Wall) -> None:
         if length is None:
             length = self.width - x
         for i in range(0, length):
             self.set(x + i, y, obj_type())
 
-    def vert_wall(self, x, y, length=None, obj_type=Wall):
+    def vert_wall(self, x: int, y: int, length: int | None = None, obj_type=Wall) -> None:
         if length is None:
             length = self.height - y
         for j in range(0, length):
             self.set(x, y + j, obj_type())
 
-    def wall_rect(self, x: int, y: int, w: int, h: int):
+    def wall_rect(self, x: int, y: int, w: int, h: int) -> None:
         self.horz_wall(x, y, w)
         self.horz_wall(x, y + h - 1, w)
         self.vert_wall(x, y, h)
         self.vert_wall(x + w - 1, y, h)
 
     @classmethod
-    def render_tile(cls, obj=None, agent=None, highlights=False, tile_size=TILE_PIXELS, subdivs=3):
+    def render_tile(cls, obj=None, agent=None, highlights=False, tile_size=TILE_PIXELS, subdivs=3) -> np.ndarray:
         key: tuple[Any, ...] = (highlights, tile_size)
         key = obj.encode() + key if obj else key
         key = agent.encode() + key if agent else key
@@ -75,9 +76,9 @@ class Grid:
         fill_coords(img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100))
         fill_coords(img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100))
 
-        if obj != None:
+        if obj is not None:
             obj.render(img)
-        if agent != None:
+        if agent is not None:
             agent.render(img)
         if highlights:
             highlight_img(img)
@@ -86,7 +87,7 @@ class Grid:
         cls.tile_cache[key] = img
         return img
 
-    def render(self, tile_size, highlight_mask=None):
+    def render(self, tile_size: int, highlight_mask=None) -> np.ndarray:
         if highlight_mask is None:
             highlight_mask = np.zeros(shape=(self.width, self.height), dtype=bool)
 
@@ -99,13 +100,13 @@ class Grid:
                 cell = self.get(i, j)
                 agents = self.get_agent(i, j)
                 tile_img = Grid.render_tile(cell, highlights=highlight_mask[i, j], tile_size=tile_size)
-                ymin = j * tile_size
-                ymax = (j + 1) * tile_size
-                xmin = i * tile_size
-                xmax = (i + 1) * tile_size
-                img[ymin:ymax, xmin:xmax, :] = tile_img
+                y_min = j * tile_size
+                y_max = (j + 1) * tile_size
+                x_min = i * tile_size
+                x_max = (i + 1) * tile_size
+                img[y_min:y_max, x_min:x_max, :] = tile_img
                 if agents is not None:
                     for agent in agents:
                         agent_img = Grid.render_tile(agent, highlights=highlight_mask[i, j], tile_size=tile_size)
-                        img[ymin:ymax, xmin:xmax, :] = agent_img
+                        img[y_min:y_max, x_min:x_max, :] = agent_img
         return img

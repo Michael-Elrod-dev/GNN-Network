@@ -1,0 +1,15 @@
+line-length = 120
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (undefined names, unused imports)
+    "W",   # pycodestyle warnings
+]
+ignore = [
+    "E741",  # ambiguous variable names like l, O (common in ML code)
+    "F401",  # unused imports (sometimes needed for re-exports)
+]
+
+[lint.per-file-ignores]
+"minigrid/*" = ["F841"]  # local variable assigned but never used

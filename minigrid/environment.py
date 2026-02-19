@@ -6,6 +6,7 @@ import torch
 import pygame
 import numpy as np
 import gymnasium as gym
+from torch import Tensor
 
 from abc import abstractmethod
 from minigrid.grid import Grid
@@ -15,8 +16,9 @@ from utils import Actions, COLOR_NAMES, TILE_PIXELS
 
 T = TypeVar("T")
 
+
 class MultiGridEnv(gym.Env):
-    def __init__(self, args, agents):
+    def __init__(self, args, agents) -> None:
         self.device = args.device
         self.clock = None
         self.window = None
@@ -43,7 +45,7 @@ class MultiGridEnv(gym.Env):
         self.max_edge_dist = args.max_edge_dist
         self.full_features = args.full_features
         self.grid = Grid(self.width, self.height)
-        
+
         # Rendering attributes
         self.highlight = True
         self.tile_size = TILE_PIXELS
@@ -62,8 +64,8 @@ class MultiGridEnv(gym.Env):
 
         self.seen_cells = np.zeros((self.width, self.height), dtype=bool)
         self.total_cells = self.width * self.height - 2 * self.width - 2 * self.height + 4
-        
-    def reset(self, render):
+
+    def reset(self, render: bool) -> tuple[Tensor, Tensor, Tensor]:
         # To keep the same grid for each episode, call env.seed() with
         # the same seed before calling env.reset()
         super().reset(seed=int(time.time()))
@@ -88,13 +90,13 @@ class MultiGridEnv(gym.Env):
         batch_node_obs = torch.stack([self._get_node_features(agent) for agent in self.agents]).to(self.device)
         batch_adj = torch.stack([self.distance_matrix for _ in self.agents]).to(self.device)
 
-        if render: 
+        if render:
             self.render()
-        
+
         return batch_obs, batch_node_obs, batch_adj
 
     @abstractmethod
-    def _gen_grid(self, width, height):
+    def _gen_grid(self, width: int, height: int) -> None:
         self.grid = Grid(width, height)
 
         # Generate the surrounding walls
@@ -144,14 +146,14 @@ class MultiGridEnv(gym.Env):
             self._place_object(obj)
             self.entities.append(obj)  # Add obstacle to entities list
 
-    def _place_agent(self, agent, x, y):
+    def _place_agent(self, agent, x: int, y: int) -> None:
         agent.init_pos = (x, y)
         agent.cur_pos = (x, y)
         agent.direction = 3
         self.grid.set_agent(x, y, agent)
         self.entities.append(agent)
 
-    def _place_object(self, obj):
+    def _place_object(self, obj) -> None:
         while True:
             x, y = self._rand_pos(1, self.width - 2, 1, self.height - 2)
             if not self.grid.get(x, y):
@@ -164,7 +166,7 @@ class MultiGridEnv(gym.Env):
                     self.obstacles.append(obj)
                 break
 
-    def _get_edge_positions(self, width, height, num_agents):
+    def _get_edge_positions(self, width: int, height: int, num_agents: int) -> list[tuple[int, int]]:
         positions = []
         total_edge_length = 2 * (width - 2) + 2 * (height - 2)
         spacing = total_edge_length / num_agents
@@ -184,8 +186,8 @@ class MultiGridEnv(gym.Env):
             current_pos += spacing
 
         return positions
-  
-    def _get_obs(self, agent):
+
+    def _get_obs(self, agent) -> Tensor:
         obs = []
         obs.extend(agent.cur_pos)
 
@@ -206,14 +208,14 @@ class MultiGridEnv(gym.Env):
         # Sort goals by distance in ascending order
         goals_in_fov.sort(key=lambda x: x[1])
         goals_in_fov = goals_in_fov[:3]
-        
+
         # Fill the remaining positions with dummy goals if necessary
         if len(goals_in_fov) == 0:
-            goals_in_fov = [(self.dummy_goal, float('inf'))] * 3
+            goals_in_fov = [(self.dummy_goal, float("inf"))] * 3
         elif len(goals_in_fov) == 1:
-            goals_in_fov.extend([(self.dummy_goal, float('inf'))] * 2)
+            goals_in_fov.extend([(self.dummy_goal, float("inf"))] * 2)
         elif len(goals_in_fov) == 2:
-            goals_in_fov.append((self.dummy_goal, float('inf')))
+            goals_in_fov.append((self.dummy_goal, float("inf")))
 
         # Check if any of the agent's goals have been collected
         if agent.goal1 is not None and agent.goal1.collected:
@@ -237,14 +239,23 @@ class MultiGridEnv(gym.Env):
             for goal, dist in goals_in_fov:
                 if goal == agent.goal1 or goal == agent.goal2 or goal == agent.goal3:
                     continue
-                if agent.goal1 == self.dummy_goal or dist < self.distance_matrix[agent_id, num_agents + self.goals.index(agent.goal1)]:
+                if (
+                    agent.goal1 == self.dummy_goal
+                    or dist < self.distance_matrix[agent_id, num_agents + self.goals.index(agent.goal1)]
+                ):
                     agent.goal3 = agent.goal2
                     agent.goal2 = agent.goal1
                     agent.goal1 = goal
-                elif agent.goal2 == self.dummy_goal or dist < self.distance_matrix[agent_id, num_agents + self.goals.index(agent.goal2)]:
+                elif (
+                    agent.goal2 == self.dummy_goal
+                    or dist < self.distance_matrix[agent_id, num_agents + self.goals.index(agent.goal2)]
+                ):
                     agent.goal3 = agent.goal2
                     agent.goal2 = goal
-                elif agent.goal3 == self.dummy_goal or dist < self.distance_matrix[agent_id, num_agents + self.goals.index(agent.goal3)]:
+                elif (
+                    agent.goal3 == self.dummy_goal
+                    or dist < self.distance_matrix[agent_id, num_agents + self.goals.index(agent.goal3)]
+                ):
                     agent.goal3 = goal
         else:
             # Fill remaining goal variables with dummy goal objects
@@ -265,9 +276,9 @@ class MultiGridEnv(gym.Env):
 
         agent.obs = torch.tensor(obs, device=self.device)
         return agent.obs
-    
+
     # TODO: fix numpy to tensor conversion
-    def _get_node_features(self, agent):
+    def _get_node_features(self, agent) -> Tensor:
         features = []
         agent_pos = agent.cur_pos
 
@@ -276,7 +287,7 @@ class MultiGridEnv(gym.Env):
             entity_pos = entity.cur_pos
             rel_pos = [entity_pos[0] - agent_pos[0], entity_pos[1] - agent_pos[1]]
             entity_features.extend(rel_pos)
-            if entity.type == 'agent':
+            if entity.type == "agent":
                 # Get the goal locations and statuses from the other agent
                 other_agent_goals = [entity.goal1, entity.goal2, entity.goal3]
                 for goal in other_agent_goals:
@@ -290,28 +301,26 @@ class MultiGridEnv(gym.Env):
                     if self.full_features:
                         entity_features.append(0)
 
-            entity_features.append(0 if entity.type == 'agent' else (1 if entity.type == 'goal' else 2))
+            entity_features.append(0 if entity.type == "agent" else (1 if entity.type == "goal" else 2))
             features.append(entity_features)
-        # [[[rel_pos, rel_goal_pos1, rel_goal_pos1_completed, ..., entity_type], [rel_pos, rel_goal_pos2, rel_goal_pos2_completed, ...], ...], ...]
         return torch.tensor(np.array(features), device=self.device)
 
-    def _update_seen_cells(self):
+    def _update_seen_cells(self) -> None:
         for i in range(self.width):
             for j in range(self.height):
-                if 0 < i < self.width-1 and 0 < j < self.height-1:  # Exclude walls
+                if 0 < i < self.width - 1 and 0 < j < self.height - 1:  # Exclude walls
                     for agent in self.agents:
-                        dist = math.sqrt((i - agent.cur_pos[0])**2 + (j - agent.cur_pos[1])**2)
+                        dist = math.sqrt((i - agent.cur_pos[0]) ** 2 + (j - agent.cur_pos[1]) ** 2)
                         if dist <= self.max_edge_dist:
                             self.seen_cells[i, j] = True
 
-    def _calculate_seen_percentage(self):
+    def _calculate_seen_percentage(self) -> float:
         return np.sum(self.seen_cells) / self.total_cells * 100
-    
-    def _handle_overlap(self, i, fwd_pos, fwd_cell):
-        reward = 0
+
+    def _handle_overlap(self, i: int, fwd_pos, fwd_cell) -> float:
         if isinstance(fwd_cell, Goal) and not fwd_cell.collected:
             reward = self._reward(self.reward_goal)
-            fwd_cell.color = 'grey'
+            fwd_cell.color = "grey"
             fwd_cell.collected = True
             self.num_collected += 1
         elif isinstance(fwd_cell, Goal) and fwd_cell.collected:
@@ -319,7 +328,7 @@ class MultiGridEnv(gym.Env):
         elif isinstance(fwd_cell, Obstacle):
             reward = self._reward(self.penalty_obstacle)
         else:
-            print(f'fwd_cell = {fwd_cell}')
+            print(f"fwd_cell = {fwd_cell}")
             raise ValueError("_handle_overlap error.")
 
         self.grid.set_agent(*fwd_pos, self.agents[i])
@@ -327,7 +336,7 @@ class MultiGridEnv(gym.Env):
         self.agents[i].cur_pos = fwd_pos
         return reward
 
-    def step(self, actions, render):
+    def step(self, actions, render: bool) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, dict]:
         self.step_count += 1
         dones = torch.zeros(len(self.agents), dtype=torch.bool, device=self.device)
         rewards = torch.zeros(len(self.agents), device=self.device)
@@ -335,7 +344,7 @@ class MultiGridEnv(gym.Env):
 
         for i, action in enumerate(actions):
             agent_pos = self.agents[i].cur_pos
-            
+
             # Move up
             if action == self.actions.up:
                 new_pos = (agent_pos[0], agent_pos[1] - 1)
@@ -375,7 +384,7 @@ class MultiGridEnv(gym.Env):
             info = {
                 "goals_collected": self.num_collected,
                 "goals_percentage": (self.num_collected / self.num_goals) * 100,
-                "seen_percentage": seen_percentage
+                "seen_percentage": seen_percentage,
             }
         else:
             info = {}
@@ -384,18 +393,17 @@ class MultiGridEnv(gym.Env):
         batch_obs = torch.stack([self._get_obs(agent) for agent in self.agents]).to(self.device)
         batch_node_obs = torch.stack([self._get_node_features(agent) for agent in self.agents]).to(self.device)
         batch_adj = torch.stack([self.distance_matrix for _ in self.agents]).to(self.device)
-        
+
         if render:
             self.render()
-                
+
         return batch_obs, batch_node_obs, batch_adj, rewards, dones, info
-    
-    def calc_distances(self, reset=False):
+
+    def calc_distances(self, reset: bool = False) -> None:
         num_entities = len(self.entities)
         num_agents = len(self.agents)
-        
+
         if reset:
-            # Calculate distances between all entities
             distance_matrix = torch.zeros((num_entities, num_entities))
             for i in range(num_entities):
                 for j in range(i + 1, num_entities):
@@ -403,11 +411,10 @@ class MultiGridEnv(gym.Env):
                     entity2 = self.entities[j]
                     x1, y1 = entity1.cur_pos
                     x2, y2 = entity2.cur_pos
-                    distance = np.sqrt((x1 - x2)**2 + (y1 - y2)**2)
+                    distance = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
                     distance_matrix[i, j] = distance
                     distance_matrix[j, i] = distance
         else:
-            # Update distances only between agents and other entities
             distance_matrix = self.distance_matrix.clone()
             for i in range(num_agents):
                 for j in range(num_agents, num_entities):
@@ -415,13 +422,13 @@ class MultiGridEnv(gym.Env):
                     entity = self.entities[j]
                     x1, y1 = agent.cur_pos
                     x2, y2 = entity.cur_pos
-                    distance = np.sqrt((x1 - x2)**2 + (y1 - y2)**2)
+                    distance = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
                     distance_matrix[i, j] = distance
                     distance_matrix[j, i] = distance
-        
+
         self.distance_matrix = distance_matrix
-    
-    def render(self):
+
+    def render(self) -> None:
         img = self.get_full_render(self.highlight, self.tile_size)
         img = np.transpose(img, axes=(1, 0, 2))
 
@@ -445,67 +452,60 @@ class MultiGridEnv(gym.Env):
         bg = pygame.transform.smoothscale(bg, (self.screen_size, self.screen_size))
         line_surface = pygame.Surface((self.screen_size, self.screen_size), pygame.SRCALPHA)
 
-        # # Draw lines between agents without considering distance
-        # for i in range(len(self.agents)):
-        #     for j in range(i + 1, len(self.agents)):
-        #         agent1 = self.agents[i]
-        #         agent2 = self.agents[j]
-        #         pos1 = (((agent1.cur_pos[0] + 1) * self.tile_size + self.tile_size // 2) * (self.screen_size / (surf.get_size()[0] + offset)), 
-        #                 ((agent1.cur_pos[1]) * self.tile_size + self.tile_size // 2) * (self.screen_size / (surf.get_size()[1] + offset)))
-        #         pos2 = (((agent2.cur_pos[0] + 1) * self.tile_size + self.tile_size // 2) * (self.screen_size / (surf.get_size()[0] + offset)), 
-        #                 ((agent2.cur_pos[1]) * self.tile_size + self.tile_size // 2) * (self.screen_size / (surf.get_size()[1] + offset)))
-        #         pygame.draw.line(line_surface, (255, 0, 0), pos1, pos2, 2)
+        for i in range(len(self.agents)):
+            for j in range(i + 1, len(self.agents)):
+                agent1 = self.agents[i]
+                agent2 = self.agents[j]
+                pos1 = (
+                    ((agent1.cur_pos[0] + 1) * self.tile_size + self.tile_size // 2)
+                    * (self.screen_size / (surf.get_size()[0] + offset)),
+                    ((agent1.cur_pos[1]) * self.tile_size + self.tile_size // 2)
+                    * (self.screen_size / (surf.get_size()[1] + offset)),
+                )
+                pos2 = (
+                    ((agent2.cur_pos[0] + 1) * self.tile_size + self.tile_size // 2)
+                    * (self.screen_size / (surf.get_size()[0] + offset)),
+                    ((agent2.cur_pos[1]) * self.tile_size + self.tile_size // 2)
+                    * (self.screen_size / (surf.get_size()[1] + offset)),
+                )
+                pygame.draw.line(line_surface, (255, 0, 0), pos1, pos2, 2)
 
-        # # Draw lines between agents and non-agent entities within the specified distance
-        # for agent in self.agents:
-        #     for entity in self.entities:
-        #         if entity not in self.agents:
-        #             dist = math.sqrt((agent.cur_pos[0] - entity.cur_pos[0])**2 + (agent.cur_pos[1] - entity.cur_pos[1])**2)
-        #             if dist <= self.max_edge_dist:
-        #                 pos1 = (((agent.cur_pos[0] + 1) * self.tile_size + self.tile_size // 2) * (self.screen_size / (surf.get_size()[0] + offset)), 
-        #                         ((agent.cur_pos[1]) * self.tile_size + self.tile_size // 2) * (self.screen_size / (surf.get_size()[1] + offset)))
-        #                 pos2 = (((entity.cur_pos[0] + 1) * self.tile_size + self.tile_size // 2) * (self.screen_size / (surf.get_size()[0] + offset)), 
-        #                         ((entity.cur_pos[1]) * self.tile_size + self.tile_size // 2) * (self.screen_size / (surf.get_size()[1] + offset)))
-        #                 pygame.draw.line(line_surface, (255, 0, 0), pos1, pos2, 2)
-
-        # Blit the line surface onto the background
         bg.blit(line_surface, (0, 0))
         self.window.blit(bg, (0, 0))
         pygame.event.pump()
         pygame.display.flip()
 
-    def get_full_render(self, highlight, tile_size):
+    def get_full_render(self, highlight: bool, tile_size: int) -> np.ndarray:
         highlight_masks = np.zeros((self.width, self.height), dtype=bool)
 
         for i in range(self.width):
             for j in range(self.height):
-                # Compute the Euclidean distance from the agent's position
                 for agent in self.agents:
-                    dist = math.sqrt((i - agent.cur_pos[0])**2 + (j - agent.cur_pos[1])**2)
+                    dist = math.sqrt((i - agent.cur_pos[0]) ** 2 + (j - agent.cur_pos[1]) ** 2)
                     if dist <= self.max_edge_dist:
                         highlight_masks[i, j] = True
-        
-        img = self.grid.render(tile_size,highlight_mask=highlight_masks if highlight else None)
+
+        img = self.grid.render(tile_size, highlight_mask=highlight_masks if highlight else None)
         return img
 
-    def _reward(self, reward):
-        return reward * (self.gamma ** self.step_count)
-    
-    def _rand_int(self, low, high):
+    def _reward(self, reward: float) -> float:
+        return reward * (self.gamma**self.step_count)
+
+    def _rand_int(self, low: int, high: int) -> int:
         return self.np_random.integers(low, high)
 
-    def _rand_float(self, low, high):
+    def _rand_float(self, low: float, high: float) -> float:
         return self.np_random.uniform(low, high)
 
-    def _rand_bool(self):
-        return (self.np_random.integers(0, 2) == 0)
+    def _rand_bool(self) -> bool:
+        return self.np_random.integers(0, 2) == 0
 
-    def _rand_elem(self, iterable: Iterable[T]):
+    def _rand_elem(self, iterable: Iterable[T]) -> T:
         lst = list(iterable)
         idx = self._rand_int(0, len(lst))
         return lst[idx]
 
-    def _rand_subset(self, iterable: Iterable[T], num_elems: int):
+    def _rand_subset(self, iterable: Iterable[T], num_elems: int) -> list[T]:
         lst = list(iterable)
         assert num_elems <= len(lst)
         out: list[T] = []
@@ -515,13 +515,13 @@ class MultiGridEnv(gym.Env):
             out.append(elem)
         return out
 
-    def _rand_color(self):
+    def _rand_color(self) -> str:
         return self._rand_elem(COLOR_NAMES)
 
-    def _rand_pos(self, xLow, xHigh, yLow, yHigh):
-        return (self.np_random.integers(xLow, xHigh),self.np_random.integers(yLow, yHigh))
-    
-    def close(self):
+    def _rand_pos(self, x_low: int, x_high: int, y_low: int, y_high: int) -> tuple[int, int]:
+        return self.np_random.integers(x_low, x_high), self.np_random.integers(y_low, y_high)
+
+    def close(self) -> None:
         if self.window is not None:
             pygame.display.quit()
             pygame.quit()

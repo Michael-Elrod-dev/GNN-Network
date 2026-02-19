@@ -1,7 +1,8 @@
 import numpy as np
+from typing import Callable
 
 
-def downsample(img, factor):
+def downsample(img: np.ndarray, factor: int) -> np.ndarray:
     assert img.shape[0] % factor == 0
     assert img.shape[1] % factor == 0
     img = img.reshape([img.shape[0] // factor, factor, img.shape[1] // factor, factor, 3])
@@ -9,7 +10,8 @@ def downsample(img, factor):
     img = img.mean(axis=1)
     return img
 
-def fill_coords(img, fn, color):
+
+def fill_coords(img: np.ndarray, fn: Callable[[float, float], bool], color) -> np.ndarray:
     for y in range(img.shape[0]):
         for x in range(img.shape[1]):
             yf = (y + 0.5) / img.shape[0]
@@ -18,17 +20,22 @@ def fill_coords(img, fn, color):
                 img[y, x] = color
     return img
 
-def point_in_circle(cx, cy, r):
+
+def point_in_circle(cx: float, cy: float, r: float) -> Callable[[float, float], bool]:
     def fn(x, y):
         return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r
+
     return fn
 
-def point_in_rect(xmin, xmax, ymin, ymax):
+
+def point_in_rect(x_min: float, x_max: float, y_min: float, y_max: float) -> Callable[[float, float], bool]:
     def fn(x, y):
-        return x >= xmin and x <= xmax and y >= ymin and y <= ymax
+        return x_min <= x <= x_max and y_min <= y <= y_max
+
     return fn
 
-def highlight_img(img, color=(255, 255, 255), alpha=0.30):
+
+def highlight_img(img: np.ndarray, color: tuple = (255, 255, 255), alpha: float = 0.30) -> None:
     blend_img = img + alpha * (np.array(color, dtype=np.uint8) - img)
     blend_img = blend_img.clip(0, 255).astype(np.uint8)
     img[:, :, :] = blend_img
