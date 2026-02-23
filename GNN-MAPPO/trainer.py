@@ -1,0 +1,252 @@
+"""
+GR_MAPPO: PPO gradient update for graph-based MAPPO.
+Adapted from InforMARL/onpolicy/algorithms/graph_mappo.py.
+
+Key changes vs. original:
+  - AMP / GradScaler removed; plain .backward() / .step().
+  - Only feed_forward_generator path (no recurrent generators).
+  - ValueNorm from utils.py.
+"""
+
+import torch
+import torch.nn as nn
+from typing import Optional
+
+from utils import ValueNorm, get_grad_norm, huber_loss, mse_loss, check
+
+
+class GR_MAPPO:
+    """
+    PPO trainer for GR-MAPPO.
+
+    Args:
+        args:    hyperparameter namespace
+        policy:  GR_MAPPOPolicy
+        device:  torch device
+    """
+
+    def __init__(self, args, policy, device=torch.device("cpu")):
+        self.device = device
+        self.tpdv = dict(dtype=torch.float32, device=device)
+        self.policy = policy
+
+        self.clip_param = args.clip_param
+        self.ppo_epoch = args.ppo_epoch
+        self.num_mini_batch = args.num_mini_batch
+        self.data_chunk_length = args.data_chunk_length
+        self.value_loss_coef = args.value_loss_coef
+        self.entropy_coef = args.entropy_coef
+        self.max_grad_norm = args.max_grad_norm
+        self.huber_delta = args.huber_delta
+
+        self._use_recurrent_policy = args.use_recurrent_policy
+        self._use_naive_recurrent_policy = args.use_naive_recurrent_policy
+        self._use_max_grad_norm = args.use_max_grad_norm
+        self._use_clipped_value_loss = args.use_clipped_value_loss
+        self._use_huber_loss = args.use_huber_loss
+        self._use_popart = args.use_popart
+        self._use_valuenorm = args.use_valuenorm
+        self._use_value_active_masks = args.use_value_active_masks
+        self._use_policy_active_masks = args.use_policy_active_masks
+
+        assert not (self._use_popart and self._use_valuenorm), "Cannot use both PopArt and ValueNorm."
+
+        if self._use_valuenorm:
+            self.value_normalizer = ValueNorm(1, device=device)
+        else:
+            self.value_normalizer = None
+
+    # ------------------------------------------------------------------
+    # Value loss
+    # ------------------------------------------------------------------
+
+    def cal_value_loss(self, values, value_preds_batch, return_batch, active_masks_batch):
+        """Huber or MSE loss on normalized returns."""
+        value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
+
+        if self._use_valuenorm:
+            self.value_normalizer.update(return_batch)
+            error_clipped = self.value_normalizer.normalize(return_batch) - value_pred_clipped
+            error_original = self.value_normalizer.normalize(return_batch) - values
+        else:
+            error_clipped = return_batch - value_pred_clipped
+            error_original = return_batch - values
+
+        if self._use_huber_loss:
+            value_loss_clipped = huber_loss(error_clipped, self.huber_delta)
+            value_loss_original = huber_loss(error_original, self.huber_delta)
+        else:
+            value_loss_clipped = mse_loss(error_clipped)
+            value_loss_original = mse_loss(error_original)
+
+        if self._use_clipped_value_loss:
+            value_loss = torch.max(value_loss_original, value_loss_clipped)
+        else:
+            value_loss = value_loss_original
+
+        if self._use_value_active_masks:
+            value_loss = (value_loss * active_masks_batch).sum() / active_masks_batch.sum()
+        else:
+            value_loss = value_loss.mean()
+
+        return value_loss
+
+    # ------------------------------------------------------------------
+    # Single PPO update step
+    # ------------------------------------------------------------------
+
+    def ppo_update(self, sample, update_actor: bool = True):
+        """One mini-batch PPO gradient step. Returns losses and grad norms."""
+        (
+            share_obs_batch,
+            obs_batch,
+            node_obs_batch,
+            adj_batch,
+            agent_id_batch,
+            rnn_states_batch,
+            rnn_states_critic_batch,
+            actions_batch,
+            value_preds_batch,
+            return_batch,
+            masks_batch,
+            active_masks_batch,
+            old_action_log_probs_batch,
+            available_actions_batch,
+        ) = sample
+
+        old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
+        advantages = check(return_batch).to(**self.tpdv) - check(value_preds_batch).to(**self.tpdv)
+        # advantages normalised across the mini-batch
+        advantages_copy = advantages.clone()
+        if self._use_value_active_masks:
+            active = check(active_masks_batch).to(**self.tpdv)
+            advantages_copy[active == 0.0] = float("nan")
+        adv_mean = torch.nanmean(advantages_copy)
+        adv_std = torch.sqrt(torch.nanmean((advantages_copy - adv_mean) ** 2))
+        advantages = (advantages - adv_mean) / (adv_std + 1e-5)
+
+        values, action_log_probs, dist_entropy = self.policy.evaluate_actions(
+            share_obs_batch,
+            obs_batch,
+            node_obs_batch,
+            adj_batch,
+            agent_id_batch,
+            rnn_states_batch,
+            rnn_states_critic_batch,
+            actions_batch,
+            masks_batch,
+            available_actions_batch,
+            check(active_masks_batch).to(**self.tpdv) if self._use_policy_active_masks else None,
+        )
+
+        # --- Actor loss ---
+        ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
+        surr1 = ratio * advantages
+        surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * advantages
+
+        if self._use_policy_active_masks:
+            active = check(active_masks_batch).to(**self.tpdv)
+            policy_action_loss = (
+                -torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True) * active
+            ).sum() / active.sum()
+        else:
+            policy_action_loss = -torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True).mean()
+
+        policy_loss = policy_action_loss - dist_entropy * self.entropy_coef
+
+        self.policy.actor_optimizer.zero_grad()
+        if update_actor:
+            policy_loss.backward()
+        actor_grad_norm = 0.0
+        if update_actor:
+            if self._use_max_grad_norm:
+                actor_grad_norm = nn.utils.clip_grad_norm_(self.policy.actor.parameters(), self.max_grad_norm)
+            else:
+                actor_grad_norm = get_grad_norm(self.policy.actor.parameters())
+            self.policy.actor_optimizer.step()
+
+        # --- Critic loss ---
+        value_loss = self.cal_value_loss(
+            values,
+            check(value_preds_batch).to(**self.tpdv),
+            check(return_batch).to(**self.tpdv),
+            check(active_masks_batch).to(**self.tpdv),
+        )
+
+        self.policy.critic_optimizer.zero_grad()
+        (value_loss * self.value_loss_coef).backward()
+        if self._use_max_grad_norm:
+            critic_grad_norm = nn.utils.clip_grad_norm_(self.policy.critic.parameters(), self.max_grad_norm)
+        else:
+            critic_grad_norm = get_grad_norm(self.policy.critic.parameters())
+        self.policy.critic_optimizer.step()
+
+        return (
+            value_loss,
+            critic_grad_norm,
+            policy_loss,
+            dist_entropy,
+            actor_grad_norm,
+            ratio,
+        )
+
+    # ------------------------------------------------------------------
+    # Full training pass over buffer
+    # ------------------------------------------------------------------
+
+    def train(self, buffer, update_actor: bool = True):
+        """
+        Iterate over buffer with feed_forward_generator for ppo_epoch epochs.
+        Returns dict of averaged losses/metrics.
+        """
+        if self._use_valuenorm:
+            advantages = buffer.returns[:-1] - self.value_normalizer.denormalize(buffer.value_preds[:-1])
+        else:
+            advantages = buffer.returns[:-1] - buffer.value_preds[:-1]
+        advantages = torch.from_numpy(advantages)
+
+        train_info = {
+            "value_loss": 0,
+            "policy_loss": 0,
+            "dist_entropy": 0,
+            "actor_grad_norm": 0,
+            "critic_grad_norm": 0,
+            "ratio": 0,
+        }
+        update_count = 0
+
+        for _ in range(self.ppo_epoch):
+            for sample in buffer.feed_forward_generator(advantages, self.num_mini_batch):
+                (
+                    value_loss,
+                    critic_grad_norm,
+                    policy_loss,
+                    dist_entropy,
+                    actor_grad_norm,
+                    ratio,
+                ) = self.ppo_update(sample, update_actor=update_actor)
+
+                train_info["value_loss"] += value_loss.item()
+                train_info["policy_loss"] += policy_loss.item()
+                train_info["dist_entropy"] += dist_entropy.item()
+                train_info["actor_grad_norm"] += (
+                    actor_grad_norm.item() if hasattr(actor_grad_norm, "item") else actor_grad_norm
+                )
+                train_info["critic_grad_norm"] += (
+                    critic_grad_norm.item() if hasattr(critic_grad_norm, "item") else critic_grad_norm
+                )
+                train_info["ratio"] += ratio.mean().item()
+                update_count += 1
+
+        for k in train_info:
+            train_info[k] /= update_count
+
+        return train_info
+
+    def prep_training(self):
+        self.policy.actor.train()
+        self.policy.critic.train()
+
+    def prep_rollout(self):
+        self.policy.actor.eval()
+        self.policy.critic.eval()

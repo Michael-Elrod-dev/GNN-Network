@@ -42,3 +42,4 @@ output_*.log
 
 # SLURM
 slurm-*.out
+InforMARL/

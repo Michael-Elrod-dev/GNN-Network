@@ -1,0 +1,231 @@
+In recent years, we've seen increasing deployment of autonomous drone fleets for many different applications like
+disaster response, environmental monitoring and surveillance. But effectively coordinating these multi-drone systems
+present several significant challenges.
+First, these drones often operate under partial observability - they can only see what's within their limited field of view,
+making it difficult to develop a complete understanding of the environment. This is particularly challenging when the
+location of their objective isn't known in advance for example in many search and rescue efforts.
+Second, drones have strict energy constraints which not only limit their run time, but can also limit their communication. They can't simply broadcast
+high-resolution data to every other drone in the fleet. Instead, they must rely on lightweight communication protocols
+with other nearby drones or by utilizing some centralized communication hub which may not be available.
+Third, these drones often operate in uncertain and dynamic environments where conditions can change presenting unique
+challenges.
+Traditional path-planning algorithms like traveling salesman problem solvers and greedy algorithms struggle under these
+constraints, particularly when prior information about the environment or objective locations aren’t available. This is
+the gap my research addresses with a machine learning framework that integrates a Graph Neural Network, an attention transformer, and deep
+reinforcement learning to enable coordination even under these conditions.
+
+To further break down why existing path-planning methods struggle with this problem:
+First, we have Traveling Salesman Problem or TSP solvers. While mathematically elegant, they assume complete knowledge
+of all target locations in advance. In real disaster scenarios or environmental monitoring missions, this information
+simply isn't available beforehand. Numerical optimization techniques face similar challenges. They can compute optimal
+paths efficiently, but require well-defined objectives and constraints that are often impossible to formulate in
+uncertain environments. Greedy algorithms are also computationally light and can work well for single agents, but they
+struggle with multi-agent coordination. When multiple drones make locally optimal decisions without coordination, we see
+significant path redundancy and a lack of exploration.
+Even standard Reinforcement Learning approaches face difficulties in multi-agent settings. They often scale poorly
+as the number of agents increase and struggle to leverage the benefits of coordination when communication is limited.
+For this solution I needed an approach that could all of these conditions: partial observability, enable lightweight information exchange
+between agents, and adapt to unknown environments while maintaining scalability. This is what motivated the integrated
+GNN-Transformer-Deep learning framework.
+
+So, at its core, my approach models the multi-agent system as a bidirectional graph where both agents and objectives are represented as
+nodes, and their relationships as weighted edges. This graph structure is constantly updated as agents move and
+explore the environment.
+The Graph Neural Network serves as the foundation, enabling agents to share information with each other
+through a message-passing mechanism. Through this, the agents are able to share and process the locations of nearby
+and the objectives locations they can see ( Claude i need help making this part better something about how the agents can share their own position and objectives they can see as well as share that of the ones they reciece for others in mesages.. idk how to word it).
+This is enhanced with a transformer layer that allows the network to calculate the importance of information being shared.
+This allows drones to focus on objectives and important coordination opportunities while filtering out redundant information.
+Finally, the agent policy is optimized using a Deep Q-Network with a replay buffer, which is used to stabilize the training process
+and update the learned policy over time.
+So, with these 3 components together: the GNN provides lightweight information exchange between drones,
+the transformer handles prioritizing information from that shared data, and the
+DQN stores agent experiences and updates the learned policy during training until it converges to an optimal solution.
+
+Next, to evaluate my approach, I utilized a 2D, grid-based environment to simulate drone movement over time and objective locations.
+As you can see in this visualization, we have several represented by these drone icons and the objectives that they're
+searching for shown as the green dots with the gray ones being objectives that have already been visited.
+Each agent has two constraints. First, they have a limited field of view shown by these red circles. Meaning
+they are only aware of objectives within this radius, creating partial observability.
+Second, each drone can only communicate up to 3 other drones depending on distance to model the bandwidth limitations.
+These communication links are used to form the moving, bidirectional graph that serves as teh Graph neural network's structure.
+When an objective falls within an drone's field of view it becomes part of the shared knowledge. However, an objective is only
+considered 'served' when an agent physically enters its cell represented by the grey dots that agents have passed over
+already.
+At the beginning of each session, drones are distributed along the borders of the environment and the objectives are randomly
+distributed throughout the interior of the grid, with their locations unknown to the agents until discovery.
+This setup requires the drones to not only explore but to coordinate with each other to find and visit all objectives
+in a reasonable amount of time.
+
+---Starting here i want to combine these next three section into one where ill break down th network all on one slide---
+Next, I want to break down all 3 parts of the network to explain how each section plays its part in the learning process.
+As I mentioned, the foundation of the framework is a Graph Neural Network designed to process both local and shared
+information between drones. As shown in this diagram, the GNN consists of two primary components: an entity embedding
+layer and an attention transformer.
+In this environment, both drones and objectives are treated as nodes in a graph each represented by a feature vector which includes coordinates
+for their own locations as well as objectives in their field of view if any are present. The embedding layer processes
+each nodes features and propagates it throughout the graph.
+Next we leverage transformer layers that allows the algorithm to weigh the importance of shared information.
+For example, a drone might give higher priority to information about locally discovered objective or to nearby drones
+that have discovered a new cluster of nearby objectives.
+The output from this GNN forms an embedding that captures a nodes local environment and the
+information shared across the communication network. These embeddings then feed into the Deep Q-Network, which uses them to
+determine the value of different actions.
+
+At the heart of the framework's ability to prioritize important information is the attention transformer. This is what
+allows the system to focus on the most relevant interactions in a complex multi-agent environment.
+I implement this using multi-head transformer layers with 3 attention heads. Each head can focus on different aspects
+of the relationships between nodes, providing the model with multiple perspectives on the same graph structure.
+The attention mechanism works by computing how important each connection is within the graph. Unlike standard approaches,
+my method incorporates both information about the nodes themselves and about the quality of the connections between
+them. This allows agents to prioritize relationships that are more relevant to their decision-making.
+This is visualized in the heatmap you see here, where brighter colors indicate stronger attention weights between agents
+and objectives. For example, you can see that Agent 2 assigns the highest attention weight of 1.0 to objective 4, indicating that
+this objective is its highest priority.
+What makes this approach distinctive is that it considers not just which nodes are important, but also how those nodes
+are connected. This is crucial for effective coordination because it enables agents to filter out noise or redundancy
+and focus on the most important information, especially in bandwidth-constrained environments where efficient
+communication is essential.
+
+Lastly, To optimize the actual decision-making process of our agents, I employ a Deep Q-Network framework enhanced with
+prioritized experience replay—a combination that provides both stability and efficient learning in a partially observable
+environment.
+The DQN architecture uses two networks: an online network for action selection and a separate target network for value
+estimation. This separation helps prevent the overestimation of action values, a common issue in standard DQN
+implementations that can lead to suboptimal policies.
+The Q-network is trained to minimize the temporal difference error between the predicted action-value and the target
+value, which is computed using the reward plus the discounted future return. My loss function incorporates importance
+sampling weights from our prioritized replay mechanism, giving more learning emphasis to rare but informative experiences.
+Speaking of the prioritized experience replay, this is a crucial component that dramatically improves sample efficiency.
+Instead of randomly sampling from our experience buffer, I prioritize transitions based on their temporal difference
+error—essentially focusing our learning on the experiences that are the most unique or valuable.
+For training, I use carefully selected hyperparameters: a learning rate of 0.0005, which provides a good balance between
+convergence speed and stability; a replay buffer size of 100,000 transitions; and a soft update rate of 0.001 for
+gradually transferring weights from the online to the target network.
+During training, I use an epsilon-greedy exploration strategy where the exploration rate decays linearly from 1.0 to 0.01,
+allowing our agents to transition smoothly from exploration to exploitation as they gain experience.
+This learning algorithm, when combined with the GNN architecture and attention mechanism, enables our agents to develop
+sophisticated coordination strategies that, as you will see, far outperform traditional approaches.
+
+To evaluate my approach at scale, I tested an array of different environment sizes.
+As you can see in this table, I tested six different configurations, starting with a small 10×10 grid containing just
+2 agents and 10 objectives, and scaling up to a 60×60 grid with 35 agents and 170 objectives.
+For each configuration, I ran simulations with both the proposed GNN-based approach and a DQN method that
+utilizes simple fully connected linear layers, to act as a baseline for comparison. I conducted training sessions of different
+durations as well from 250,000 overall time steps to 1,000,000 to also understand how performance changes with extended training.
+To quantify performance, I focused on two primary metrics. First, the objective collection percentage and second,
+the grid coverage percentage which shows how much
+of the environment was observed by the drones field of view during a session.
+
+So, for the results, as shown in this figure, my GNN approach consistently outperformed the standard DQN across all scales of complexity.
+Looking first at objective visitation rates, represented by the red and green lines, we see that the GNN maintains high
+performance even as the environment complexity increases, achieving as high as a 90% in a larger grid with 15 drones.
+In contrast, the DQN, shown by the blue and orange dotted lines, struggles significantly as the environment scales up.
+Ignoring the smaller environments the best-performing configuration reaches only 42% in the same environment.
+And this performance gap is consistent when we move to the right side of the graph representing much larger environments.
+Looking at the grid coverage results in the lower graph, we see the GNN approach consistently achieves near-complete
+coverage of the environment, maintaining above 95% coverage across all configurations. The DQN, meanwhile, drops to
+roughly 80% on average, missing significant portions of the environment.
+
+Now, while those results showed the final performance metrics, this graph reveals
+how quickly agents are able to visit each objective over time.
+The orange line represents my GNN-based approach, while the blue line shows the standard DQN method, both in the
+environment with 15 agents and 80 objectives.
+The GNN approach demonstrates remarkably faster visitation from the very beginning of the session. Within just the
+first 50 time steps, you can see we've already discovered and visited over 65% of the objectives. By the halfway point of the
+episode, around 100 time steps, we've collected roughly 75%.
+In contrast, the standard DQN method shows a much slower collection rate, achieving only about 30% overall.
+Aside from the difference in overall success, this metric is crucial for real-world applications where energy and time
+efficiency matters giving value to objectives being completed faster.
+
+Next, to better understand other aspects of the GNN frameworks performance, I conducted a series of studies
+places different constraints on the drones' communication. First I looked at how the number of communication links affects performance.
+This graph shows the objective visitation percentage as I adjust the maximum number of other drones can communicate with each other at one time.
+Starting with only 2 connections per drone, we still achieve a respectable 74% and as we increase
+the connection limit to 3 and then 4, performance rises steadily as expected. This initial improvement makes intuitive sense—allowing
+drones receive and share more information enables better coordination.
+Beyond 5 connections, performance begins to ultimately plateau at about 84%-86%
+meaning there's a communication-performance tradeoff.
+While more communication generally improves performance, the returns diminish beyond a certain point. In this case, 5
+connections appears to arguably be the sweet spot where we get the performance benefit without creating
+excessive communication overhead.
+
+But what happens when the communication is imperfect? Real-world multi-agent systems must often deal with communication
+latency for example. To simulate this condition, I modified my framework to introduce a 20% chance that drones would receive outdated
+information from other drones to mimic delays in message transmission.
+As you can see from this graph, even with this significant latency issue, the GNN maintained performance.
+While the original GNN achieved 80%, the latency condition still managed roughly 73% compared to the original DQN’s 34% performance.
+I found this example to be particularly important for real world applications, where network infrastructure may be
+damaged or overloaded showing the GNN's ability to still extract valuable information even from outdated data.
+
+Another challenge in real-world deployment is data corruption during transmission. To test the framework's resilience to
+this issue, I introduced a 20% chance that messages received from other drones would have some noise applied to them.
+Despite the corruption, performance only dropped again from 80% to roughly
+73%. Suggestiong the GNN can effectively filter out noise and maintain coordination even when communication is imperfect.
+
+Perhaps the most severe communication issue in multi-agent systems is complete message loss. To simulate this scenario,
+I tested the framework with two different levels of message dropping: 10% and 25% chance of a message being lost completely.
+Surprisingly, the results show no performance difference between these scenarios.
+There was a marginal improvement of approximately 1% in both cases, though this difference is with a margin of error expected
+as it roughly amounts to one additional objective on average which can be easily be attributed to the randomized
+nature of the environments.
+These findings directly connect to my earlier study on connection limits. As I mentioned, performance begins to plateau
+once drones can communicate with about 5-7 as additional information just becomes redundant for local decisions. This
+redundancy in information arguably also renders the system highly resilient to random message loss.
+I found this study to be the most encouraging for real-world deployment as it suggests this approach can maintain full
+performance in environments with compromised communication signals.
+
+The final aspect of my communication study examined whether constant communication is actually necessary for optimal
+performance. I tested reducing the frequency of information exchange between drones to study the effect this could have
+on collaboration versus local decisions. The intervals I tested were 3, 5, 8, 10, and 12 time steps.
+Interestingly, the results show that less frequent communication sometimes actually leads to better performance.
+While updating every time step achieved 80%, updating every 10 steps resulted in roughly 85%.
+However, when communication became too infrequent (every 12 steps), performance dropped to roughly 73%, suggesting I'd
+crossed a critical threshold.
+This counter-intuitive finding suggests that constant communication might actually be interrupting the drones' ability to
+make independent decisions based on their immediate surroundings.
+By reducing communication frequency, we not only optimize bandwidth usage but potentially improve overall system performance
+by striking a better balance between collaborative and independent decision-making.
+
+In conclusion, I've presented an innovative framework that integrates Graph Neural Networks, transformers, and Deep
+Q-Learning to enable effective multi-agent coordination in partially observable environments with limited communication.
+My approach demonstrates substantial improvements over existing methods across multiple metrics. I achieved at best 90%
+goal collection rate compared to just 42% for the baseline DQN. I also maintained near-complete grid coverage in all
+configurations while significantly reducing the steps required per episode from around 600 to just 200 steps.
+The key components that enabled these improvements include the adaptive graph construction method, which efficiently
+represents agent-agent and agent-goal interactions; the transformer-based message-passing mechanism with edge-feature-enhanced
+attention, which captures complex interaction patterns; and the DQN with prioritized experience replay, which optimizes
+agent policies even in challenging partially observable conditions.
+As my ablation studies revealed, the framework demonstrates remarkable resilience to communication impairments. The
+system maintains full performance even with 25% message loss and shows minimal degradation under communication latency
+and data corruption. These findings suggest that this approach is particularly well-suited for real-world deployment in
+challenging environments where communication reliability cannot be guaranteed.
+Now, at the time of my graduation, this is where my formal research concluded. But over the past few months, just out of
+personal curiosity, I revisited something that had been nagging at me — a theoretical limitation I suspected in the
+Q-learning approach itself.
+The core issue is that as you add more agents, the replay buffer becomes increasingly problematic. Because it stores
+experiences from all agents mixed together, those experiences quickly go stale — by the time they're replayed for
+training, the other agents have already updated their behavior, so the
+stored data no longer reflects the current environment. This is a known non-stationarity problem in multi-agent
+reinforcement learning, and it compounds as agent count grows.
+So just for fun, I swapped out the DQN for an on-policy learning algorithm called MAPPO — Multi-Agent Proximal Policy
+Optimization — which eliminates the replay buffer entirely. Instead of storing and replaying old data, it collects
+fresh experiences under the current policy and uses them immediately.
+Early results on the same 8-agent, 31×31 environment are promising — I'm seeing 98 to 100% goal collection on average.
+That said, I only have a home computer to work with right now, so I haven't been able to test it at the larger scales
+I evaluated the main framework on. But it's an encouraging direction.
+More formally, a natural next step for the broader framework would be incorporating a visual transformer to process raw
+sensor data directly such as a camera or lidar, removing the reliance on coordinate inputs entirely and making the system
+more applicable to real-world deployment.
+
+Some quick acknowledgments.
+Of course the AI-SENDS lab here at Clemson with Dr. Razi which hosted the environment that directly supported and guided
+my efforts on this project.
+Also the Lincoln Laboratory, specifically Dr. Amin’s group who welcomed me into their lab over the summer and allowed
+me access to all of the resources available there to support my research.
+And of course all of the attendees of our regular research meetings as well as fellow graduate student Niloufar who all
+helped prepare my research for publication and provide valuable insight.
+
+
+My personal notes:
+- How does the propagation work in the message passing layer? is it true propogation? how far does it propogate out? need clarification on this.
