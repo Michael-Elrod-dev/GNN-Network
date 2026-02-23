@@ -139,7 +139,7 @@ Aside from the difference in overall success, this metric is crucial for real-wo
 efficiency matters giving value to objectives being completed faster.
 
 Next, to better understand other aspects of the GNN frameworks performance, I conducted a series of studies
-places different constraints on the drones' communication. First I looked at how the number of communication links affects performance.
+placing different constraints on the drones' communication. First I looked at how the number of communication links affects performance.
 This graph shows the objective visitation percentage as I adjust the maximum number of other drones can communicate with each other at one time.
 Starting with only 2 connections per drone, we still achieve a respectable 74% and as we increase
 the connection limit to 3 and then 4, performance rises steadily as expected. This initial improvement makes intuitive sense—allowing
@@ -150,45 +150,46 @@ While more communication generally improves performance, the returns diminish be
 connections appears to arguably be the sweet spot where we get the performance benefit without creating
 excessive communication overhead.
 
-But what happens when the communication is imperfect? Real-world multi-agent systems must often deal with communication
-latency for example. To simulate this condition, I modified my framework to introduce a 20% chance that drones would receive outdated
+But what happens when the communication is imperfect? Real-world systems must often deal with communication
+latency for example. So, to simulate this, I modified the framework to introduce a 20% chance that drones would receive outdated
 information from other drones to mimic delays in message transmission.
-As you can see from this graph, even with this significant latency issue, the GNN maintained performance.
+As you can see from this graph, even with this latency issue, the GNN maintained performance for the most part.
 While the original GNN achieved 80%, the latency condition still managed roughly 73% compared to the original DQN’s 34% performance.
 I found this example to be particularly important for real world applications, where network infrastructure may be
-damaged or overloaded showing the GNN's ability to still extract valuable information even from outdated data.
+damaged or overloaded showing the GNN's ability to still extract valuable information.
 
 Another challenge in real-world deployment is data corruption during transmission. To test the framework's resilience to
 this issue, I introduced a 20% chance that messages received from other drones would have some noise applied to them.
-Despite the corruption, performance only dropped again from 80% to roughly
-73%. Suggestiong the GNN can effectively filter out noise and maintain coordination even when communication is imperfect.
+Despite the corruption, performance only dropped again from 80% to roughly 73%. 
+Suggestiong the GNN can effectively filter out noise and maintain coordination even when communication is imperfect.
 
-Perhaps the most severe communication issue in multi-agent systems is complete message loss. To simulate this scenario,
+Perhaps the most severe communication issue is complete message loss. To simulate this,
 I tested the framework with two different levels of message dropping: 10% and 25% chance of a message being lost completely.
 Surprisingly, the results show no performance difference between these scenarios.
 There was a marginal improvement of approximately 1% in both cases, though this difference is with a margin of error expected
 as it roughly amounts to one additional objective on average which can be easily be attributed to the randomized
 nature of the environments.
 These findings directly connect to my earlier study on connection limits. As I mentioned, performance begins to plateau
-once drones can communicate with about 5-7 as additional information just becomes redundant for local decisions. This
+once drones can communicate with about 5-7 other drones as additional information just becomes redundant for local decisions. This
 redundancy in information arguably also renders the system highly resilient to random message loss.
 I found this study to be the most encouraging for real-world deployment as it suggests this approach can maintain full
 performance in environments with compromised communication signals.
 
-The final aspect of my communication study examined whether constant communication is actually necessary for optimal
-performance. I tested reducing the frequency of information exchange between drones to study the effect this could have
-on collaboration versus local decisions. The intervals I tested were 3, 5, 8, 10, and 12 time steps.
-Interestingly, the results show that less frequent communication sometimes actually leads to better performance.
+The final aspect of my communication study examined how much communication is actually necessary for performance. 
+I tested reducing the frequency of information exchange between drones to study the effect this could have
+on collaboration versus local decisions. The intervals I tested were 3, 5, 8, 10, and 12 time steps which lead 
+to a somewhat counter-intuitive finding The results show that less frequent communication sometimes actually leads to better performance.
 While updating every time step achieved 80%, updating every 10 steps resulted in roughly 85%.
 However, when communication became too infrequent (every 12 steps), performance dropped to roughly 73%, suggesting I'd
-crossed a critical threshold.
-This counter-intuitive finding suggests that constant communication might actually be interrupting the drones' ability to
+crossed some critical threshold.
+This suggests that constant communication might actually be interrupting the drones' ability to
 make independent decisions based on their immediate surroundings.
-By reducing communication frequency, we not only optimize bandwidth usage but potentially improve overall system performance
-by striking a better balance between collaborative and independent decision-making.
 
-In conclusion, I've presented an innovative framework that integrates Graph Neural Networks, transformers, and Deep
-Q-Learning to enable effective multi-agent coordination in partially observable environments with limited communication.
+---Addtion here about new slides?---
+Or at least this was my assumption at the time. something something about recent discovery..
+
+In conclusion, we have a machine learning framework that integrates Graph Neural Networks, transformers, and Deep
+Q-Learning to enable multi-agent coordination in partially observable environments with limited communication.
 My approach demonstrates substantial improvements over existing methods across multiple metrics. I achieved at best 90%
 goal collection rate compared to just 42% for the baseline DQN. I also maintained near-complete grid coverage in all
 configurations while significantly reducing the steps required per episode from around 600 to just 200 steps.
