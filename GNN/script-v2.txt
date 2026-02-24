@@ -104,35 +104,34 @@ To evaluate my approach at scale, I tested an array of different environment siz
 As you can see in this table, I tested six different configurations, starting with a small 10×10 grid
 containing just 2 agents and 10 objectives, and scaling up to a 60×60 grid with 35 agents and 170 objectives.
 For each configuration, I ran simulations with both the proposed GNN-based approach and a DQN method that
-utilizes simple fully connected linear layers, to act as a baseline for comparison.
+utilizes simple fully connected linear layers, to act as a baseline for comparison. -- Here we should make a subtle note that the GNN approach we use is built on top of what would be considered a standard DQN which is WHY were using the DQN as the baseline
 I conducted training sessions of different durations as well, from 250,000 overall time steps to 1,000,000,
-to also understand how performance changes with extended training.
-To quantify performance, I focused on two primary metrics: first, the objective collection percentage, and
-second, the grid coverage percentage, which shows how much of the environment was observed by the drones'
+to also test how performance may change with extended training.
+To quantify performance, I focused on two primary metrics: first, the objective visitation percentage, and
+second, the grid coverage percentage, which shows how much of the environment was observed collectively by the drones'
 field of view during a session.
 
-So, for the results, as shown in this figure, my GNN approach consistently outperformed the standard DQN
-across all scales of complexity.
+So, for the results, as shown in this figure, the GNN approach consistently outperformed the standard DQN
+across all configurations.
 Looking first at objective visitation rates, represented by the red and green lines, we see that the GNN
-maintains high performance even as the environment complexity increases, achieving as high as 90% in a
-larger grid with 15 drones.
+maintains high performance even as the environment grows larger, achieving as high as 90% in a grid with 15 drones.
 In contrast, the DQN, shown by the blue and orange dotted lines, struggles significantly as the environment scales up.
-Ignoring the smaller environments, the best-performing configuration reaches only 42% in the same environment.
+Ignoring the smaller environments, the best-performing configuration reaches only 42% in the same environment. -- Here I want to mention something about the reason were ignoring maller envrionments because i ebelive that random actions are more likely to be rewarded in these environments.
 And this performance gap is consistent when we move to the right side of the graph, representing much larger environments.
 Looking at the grid coverage results in the lower graph, we see the GNN approach consistently achieves
 near-complete coverage of the environment, maintaining above 95% coverage across all configurations.
-The DQN, meanwhile, drops to roughly 80% on average, missing significant portions of the environment.
+The DQN, meanwhile, drops to roughly 80% on average, missing significant portions of the field.
 
 Now, while those results showed the final performance metrics, this graph reveals how quickly agents are
 able to visit each objective over time.
 The orange line represents my GNN-based approach, while the blue line shows the standard DQN method,
 both in the environment with 15 agents and 80 objectives.
-The GNN approach demonstrates remarkably faster visitation from the very beginning of the session.
+The GNN approach on average demonstrates a much faster visitation rate from the very beginning of the session.
 Within just the first 50 time steps, you can see we've already discovered and visited over 65% of the objectives.
-By the halfway point of the episode, around 100 time steps, we've collected roughly 75%.
-In contrast, the standard DQN method shows a much slower collection rate, achieving only about 30% overall.
+By the halfway point of the session, around 100 time steps, we've collected roughly 75%.
+In contrast, the standard DQN method shows a much slower collection rate, ultimately achieving only about 30% overall.
 Aside from the difference in overall success, this metric is crucial for real-world applications where
-energy and time efficiency matters, giving value to objectives being completed faster.
+energy and time efficiency matters, giving value to objectives being found or completed faster.
 
 Next, to better understand other aspects of the GNN framework's performance, I conducted a series of
 studies placing different constraints on the drones' communication.
@@ -143,17 +142,17 @@ Starting with only 2 connections per drone, we still achieve a respectable 74%, 
 connection limit to 3 and then 4, performance rises steadily as expected.
 This initial improvement makes intuitive sense — allowing drones to receive and share more information
 enables better coordination.
-Beyond 5 connections, performance begins to ultimately plateau at about 84%-86%, meaning there's a
-communication-performance tradeoff.
-While more communication generally improves performance, the returns diminish beyond a certain point.
-In this case, 5 connections appears to arguably be the sweet spot where we get the performance benefit
+Beyond 5 connections, performance begins to ultimately plateau at about 84%-86%, meaning 
+with the current network architecture, there's a communication-performance tradeoff.
+While more communication should generally improve performance, the returns diminish beyond a certain point.
+In this case, 5 connections appears to arguably be a sweet spot where we get the performance benefit
 without creating excessive communication overhead.
 
-But what happens when the communication is imperfect?
-Real-world systems must often deal with communication latency, for example.
+But, I also wanted to test what happens when the communication is delayed as communication latency
+is a very common issue that real-world systems deal with.
 So, to simulate this, I modified the framework to introduce a 20% chance that drones would receive
-outdated information from other drones, to mimic delays in message transmission.
-As you can see from this graph, even with this latency issue, the GNN maintained performance for the most part.
+outdated or stale information from other drones, to mimic delays in message transmission.
+As you can see from this graph, even with this latency issue, the GNN, for the most part maintained performance.
 While the original GNN achieved 80%, the latency condition still managed roughly 73% compared to the
 original DQN's 34% performance.
 I found this example to be particularly important for real-world applications, where network infrastructure
@@ -170,7 +169,7 @@ To simulate this, I tested the framework with two different levels of message dr
 chance of a message being lost completely.
 Surprisingly, the results show no performance difference between these scenarios.
 There was a marginal improvement of approximately 1% in both cases, though this difference is within a
-margin of error, as it roughly amounts to one additional objective on average, which can be easily
+margin of error expected, as it roughly amounts to one additional objective on average, which can be easily
 attributed to the randomized nature of the environments.
 These findings directly connect to my earlier study on connection limits.
 As I mentioned, performance begins to plateau once drones can communicate with about 5-7 other drones,
@@ -185,27 +184,27 @@ have on collaboration versus local decisions.
 The intervals I tested were 3, 5, 8, 10, and 12 time steps, which led to a somewhat counter-intuitive finding.
 The results show that less frequent communication sometimes actually leads to better performance.
 While updating every time step achieved 80%, updating every 10 steps resulted in roughly 85%.
-However, when communication became too infrequent, at every 12 steps, performance dropped to roughly 73%,
-suggesting I'd crossed some critical threshold.
+However, when communication became too infrequent, performance dropped to roughly 73%,
+indicating I'd crossed some critical threshold.
 This suggests that constant communication might actually be interrupting the drones' ability to make
 independent decisions based on their immediate surroundings.
 At least, at the time, that was my working explanation, but revisiting the project after graduation led
-me to question something deeper about the training algorithm itself.
+me to question something deeper about the training algorithm itself. -- I want to make this part be a bit more desscriptive. I want to say something along the lines of that this i swhere my reserach had concluded for this project as I had graduated. But that i had marked this finding as a point of research for future work and recently revisited it.
 
-The DQN approach, while effective, carries a fundamental assumption that breaks down in multi-agent
+The DQN approach for training, while effective, carries a fundamental assumption that breaks down in multi-agent
 settings: that the environment is stationary — meaning the dynamics don't change while the agent is learning.
 In a single-agent scenario that holds fine.
-But here, every other drone is simultaneously part of the environment and actively updating its own behavior.
-So from any one drone's perspective, the world it's operating in is constantly shifting as its teammates
+But here, every other drone is simultaneously part of the environment and is actively updating its own behavior.
+So from any one drone's perspective, the world it's operating in is constantly shifting as other drones
 evolve — I learned that this is known as the non-stationarity problem in multi-agent reinforcement learning.
-The replay buffer compounds it directly.
+The replay buffer I used acutally compounds it directly.
 It stores experiences from throughout training, but by the time those experiences are sampled again,
 the other agents have already changed.
 The network ends up training on a world that no longer exists.
 And the more agents you add, the faster every stored experience goes stale — so the problem compounds with scale.
 
-So, a few months ago, just out of personal curiosity, I replaced the DQN with an algorithm called
-Multi-Agent Proximal Policy Optimization.
+So, a few months ago, just out of personal curiosity, I did some more research and 
+replaced the DQN with a training algorithm called Multi-Agent Proximal Policy Optimization.
 This algorithm is on-policy, meaning it never stores old experiences at all.
 It collects fresh data under the current policy, uses it to update the network, then discards it —
 so stale experiences are impossible by design.
@@ -216,20 +215,20 @@ This gives the learning process a global view of the joint behavior, producing m
 stable updates — while keeping the system fully decentralized at runtime.
 The GNN architecture is completely unchanged — only the training algorithm was replaced.
 Early results on the same 8-agent, 30×30 environment are very encouraging — objective visitation reached
-98 to 100% on average, compared to the 85-90% range from the original DQN.
-This is personal work on a home computer, so large-scale validation hasn't really been possible yet,
-but as a proof of concept, I think it's a strong signal.
+98 to 100% on average, compared to the 85-90% range from the original GNN.
+Though, while encouraging, this is just personal work on a home computer, so large-scale validation hasn't 
+really been possible yet, but as a proof of concept, I think it's a pretty strong signal worth sharing.
 
-So, in conclusion, I've presented a machine learning framework that integrates Graph Neural Networks,
-transformers, and Deep Q-Learning to enable multi-agent coordination in partially observable environments
-with limited communication.
-My approach demonstrates up to 90% objective collection, compared to 42% for the baseline DQN,
+So, in conclusion, I've presented a machine learning framework that integrates a Graph Neural Network,
+an attention transformer, and 2 different training algorithm used to enable multi-agent coordination in 
+partially observable environments with limited communication.
+My approach demonstrates a notable improvement in objective collection, as well as
 maintaining near-complete grid coverage across all configurations.
 The framework also showed strong resilience to real-world communication impairments, maintaining
-performance even under 25% message loss, latency, and data corruption.
+performance even under message loss, latency, and data corruption.
 And as the preliminary Proximal Policy Optimization results suggest, the ceiling on performance may be higher still.
 Replacing the training algorithm alone — with no changes to the GNN — pushed results to near-perfect
-in the same environment.
+in one of the medium sized grids that were tested.
 A natural next step is validating that at scale, and longer term, incorporating raw sensor inputs like
 camera or lidar data to remove the reliance on coordinate observations entirely, making the system
 more applicable to real-world deployment.
