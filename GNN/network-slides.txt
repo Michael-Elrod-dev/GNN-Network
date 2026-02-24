@@ -1,0 +1,47 @@
+Next, I want to break down all 3 parts of the network to explain how each plays its part in the training process.
+The first component is the Graph Neural Network, which is responsible for structuring and processing
+information shared across the drone network.
+At each time step, the environment is represented as a graph where every drone and objective is a node,
+and edges between them are weighted by distance.
+This graph is filtered by the two constraints mentioned earlier: each drone connects to at most its 3 nearest
+neighboring drones, and objectives are only considered connected if they fall within the drone's vision radius.
+This keeps the graph sparse and the communication lightweight.
+Each node is represented by a feature vector that captures its position relative to the observing drone,
+its entity type — whether drone or objective — and for drone nodes, the positions of the objectives
+that drone is currently tracking.
+These features are then processed by the embedding layer, which performs an initial round of message passing,
+aggregating and transforming features from each node's direct neighbors.
+This gives the network its first pass at understanding local context — encoding not just what a node is,
+but where it is and what its neighbors are tracking.
+But at this point all connections in the graph are still treated equally — and that's where the next
+component comes in.
+
+The attention transformer's job is to figure out which of those connections actually matter.
+Using multi-head attention with 3 heads, each head learns to focus on a different aspect of the
+relationships between nodes, giving the model multiple perspectives on the same graph simultaneously.
+Crucially, the attention mechanism incorporates edge features — the actual distances between nodes —
+meaning the network considers not just what is being shared, but the quality of the connection itself.
+This is visualized in the heatmap shown here, where brighter colors indicate stronger attention weights.
+For example, Agent 2 assigns the highest weight of 1.0 to objective 4, meaning it is that drone's
+current highest priority target.
+Rather than treating all neighbor information equally, each drone learns to focus on the connections
+most relevant to its current situation — filtering out noise and redundant information.
+The output of the transformer is then passed through a linear layer, compressing everything into a
+single rich embedding per drone — and that embedding is exactly what the DQN needs to make its decision.
+
+And that decision-making is what the Deep Q-Network handles.
+Given the embedding from the GNN, the DQN learns which action — move up, down, left, or right —
+is most valuable for each drone at each step.
+It uses two networks: an online network for selecting actions and a target network for estimating
+the value of those actions.
+This separation prevents a common training instability where the network chases a moving target —
+by using a slowly updated copy for value estimation, learning stays stable.
+The network is trained by minimizing the temporal difference error — the gap between its predicted
+action value and the target value computed from the actual reward plus discounted future return.
+To improve sample efficiency, I use a prioritized replay buffer that stores agent experiences and
+samples them for training, giving priority to transitions where the prediction error was highest —
+focusing learning on the most informative experiences.
+Key hyperparameters include a learning rate of 0.0005, a buffer of 100,000 transitions, and a soft
+update rate of 0.001 for gradually syncing the online weights to the target network.
+Agents explore using an epsilon-greedy strategy, starting fully random and gradually shifting toward
+learned behavior as training progresses.
