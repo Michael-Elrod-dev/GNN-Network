@@ -1,13 +1,3 @@
-"""
-Graph-based Actor and Critic networks for GNN-MAPPO.
-Adapted from InforMARL/onpolicy/algorithms/graph_actor_critic.py.
-
-Key changes vs. original:
-  - gym.Space args replaced with explicit int dims.
-  - AMP / PopArt removed.
-  - ACTLayer takes action_dim: int directly.
-"""
-
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -15,11 +5,6 @@ from typing import Tuple, Optional
 
 from utils import init, get_clones, check
 from gnn import GNNBase
-
-
-# ---------------------------------------------------------------------------
-# Distribution helpers
-# ---------------------------------------------------------------------------
 
 
 class FixedCategorical(torch.distributions.Categorical):
@@ -52,14 +37,7 @@ class Categorical(nn.Module):
         return FixedCategorical(logits=x)
 
 
-# ---------------------------------------------------------------------------
-# ACTLayer
-# ---------------------------------------------------------------------------
-
-
 class ACTLayer(nn.Module):
-    """Final action layer; builds a Categorical head for discrete actions."""
-
     def __init__(self, action_dim: int, inputs_dim: int, use_orthogonal: bool, gain: float):
         super(ACTLayer, self).__init__()
         self.action_out = Categorical(inputs_dim, action_dim, use_orthogonal, gain)
@@ -90,11 +68,6 @@ class ACTLayer(nn.Module):
         else:
             dist_entropy = action_logits.entropy().mean()
         return action_log_probs, dist_entropy
-
-
-# ---------------------------------------------------------------------------
-# MLP
-# ---------------------------------------------------------------------------
 
 
 class MLPLayer(nn.Module):
@@ -144,11 +117,6 @@ class MLPBase(nn.Module):
         return self.mlp(x)
 
 
-# ---------------------------------------------------------------------------
-# RNNLayer (kept for signature compatibility; disabled via use_recurrent_policy=False)
-# ---------------------------------------------------------------------------
-
-
 class RNNLayer(nn.Module):
     def __init__(self, inputs_dim, outputs_dim, recurrent_N, use_orthogonal):
         super(RNNLayer, self).__init__()
@@ -175,11 +143,6 @@ class RNNLayer(nn.Module):
         return x, hxs
 
 
-# ---------------------------------------------------------------------------
-# Mini-batch generator (split large batches for memory efficiency)
-# ---------------------------------------------------------------------------
-
-
 def minibatchGenerator(obs, node_obs, adj, agent_id, max_batch_size: int):
     num_minibatches = obs.shape[0] // max_batch_size + 1
     for i in range(num_minibatches):
@@ -191,22 +154,7 @@ def minibatchGenerator(obs, node_obs, adj, agent_id, max_batch_size: int):
         )
 
 
-# ---------------------------------------------------------------------------
-# GR_Actor
-# ---------------------------------------------------------------------------
-
-
 class GR_Actor(nn.Module):
-    """
-    Actor network: GNN → MLP → Categorical action head.
-
-    Args:
-        obs_dim:      local obs feature dim (8)
-        node_obs_dim: node feature dim per entity (9)
-        edge_dim:     edge feature dim (1)
-        action_dim:   number of discrete actions (4)
-    """
-
     def __init__(
         self,
         args,
@@ -231,8 +179,8 @@ class GR_Actor(nn.Module):
         self.tpdv = dict(dtype=torch.float32, device=device)
 
         self.gnn_base = GNNBase(args, node_obs_dim, edge_dim, args.actor_graph_aggr)
-        gnn_out_dim = self.gnn_base.out_dim  # 16
-        mlp_in_dim = gnn_out_dim + obs_dim  # 16 + 8 = 24
+        gnn_out_dim = self.gnn_base.out_dim
+        mlp_in_dim = gnn_out_dim + obs_dim
 
         self.base = MLPBase(args, override_obs_dim=mlp_in_dim)
 
@@ -332,21 +280,7 @@ class GR_Actor(nn.Module):
         return action_log_probs, dist_entropy
 
 
-# ---------------------------------------------------------------------------
-# GR_Critic
-# ---------------------------------------------------------------------------
-
-
 class GR_Critic(nn.Module):
-    """
-    Critic network: GNN → MLP → scalar value.
-
-    Args:
-        cent_obs_dim:  centralized obs dim (64 = 8 agents × 8)
-        node_obs_dim:  node feature dim (9)
-        edge_dim:      edge feature dim (1)
-    """
-
     def __init__(
         self,
         args,
@@ -374,14 +308,14 @@ class GR_Critic(nn.Module):
             return init(m, init_method, lambda x: nn.init.constant_(x, 0))
 
         self.gnn_base = GNNBase(args, node_obs_dim, edge_dim, args.critic_graph_aggr)
-        gnn_out_dim = self.gnn_base.out_dim  # 16
+        gnn_out_dim = self.gnn_base.out_dim
 
         if args.critic_graph_aggr == "node":
             gnn_out_dim *= args.num_agents
 
         mlp_in_dim = gnn_out_dim
         if self.use_cent_obs:
-            mlp_in_dim += cent_obs_dim  # 16 + 64 = 80
+            mlp_in_dim += cent_obs_dim
 
         self.base = MLPBase(args, override_obs_dim=mlp_in_dim)
 

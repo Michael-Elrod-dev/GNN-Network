@@ -4,7 +4,7 @@ import time
 
 class Args:
     def __init__(self) -> None:
-        # Environment Parameters
+
         self.env = None
         self.num_agents = 15
         self.num_goals = 76
@@ -14,12 +14,11 @@ class Args:
         self.agent_connections = 3
         self.agent_view_size = 9
 
-        # Training / PPO Parameters
         self.n_rollout_threads = 4
         self.episode_length = 200
         self.num_env_steps = 500_000
         self.ppo_epoch = 10
-        self.num_mini_batch = 4  # 5600 total → 4 mini-batches of 1400 samples each
+        self.num_mini_batch = 4
         self.clip_param = 0.2
         self.value_loss_coef = 1.0
         self.entropy_coef = 0.01
@@ -32,9 +31,8 @@ class Args:
         self.opti_eps = 1e-5
         self.weight_decay = 0.0
         self.use_linear_lr_decay = True
-        self.data_chunk_length = 10  # unused (no recurrence), kept for API compat
+        self.data_chunk_length = 10
 
-        # Algorithmic Flags
         self.use_gae = True
         self.use_valuenorm = True
         self.use_popart = False
@@ -47,22 +45,21 @@ class Args:
         self.use_value_active_masks = True
         self.use_policy_active_masks = True
         self.use_centralized_V = True
-        self.use_cent_obs = True  # alias used in critic
+        self.use_cent_obs = True
         self.use_proper_time_limits = False
         self.use_feature_normalization = True
         self.use_ReLU = True
-        self.layer_N = 1  # MLP depth
-        self.gain = 0.01  # orthogonal init gain for output layers
+        self.layer_N = 1
+        self.gain = 0.01
         self.stacked_frames = 1
         self.hidden_size = 64
 
-        # GNN Parameters
         self.gnn_hidden_size = 16
         self.gnn_num_heads = 3
         self.gnn_concat_heads = False
-        self.node_obs_shape = 9  # 9 features per entity node (8+1 entity_type)
+        self.node_obs_shape = 9
         self.edge_dim = 1
-        self.num_embeddings = 2  # 0=agent, 1=goal (no obstacles)
+        self.num_embeddings = 2
         self.embedding_size = 12
         self.gnn_layer_N = 2
         self.gnn_use_ReLU = True
@@ -79,7 +76,6 @@ class Args:
         self.max_batch_size = 128
         self.full_features = False
 
-        # Runner Parameters
         self.seed = int(time.time())
         self.device = "cuda"
         self.save_interval = 10
@@ -88,11 +84,9 @@ class Args:
         self.use_render = True
         self.model_dir = None
 
-        # Reward Parameters
         self.reward_goal = 10
         self.penalty_goal = 0
         self.penalty_obstacle = 0
         self.penalty_invalid_move = -5
 
-        # Derived
         self.title = os.path.basename(os.path.dirname(os.path.abspath(__file__)))

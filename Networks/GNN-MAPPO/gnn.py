@@ -1,8 +1,3 @@
-"""
-GNN module for GNN-MAPPO.
-Adapted from InforMARL/onpolicy/algorithms/utils/gnn.py.
-"""
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -19,11 +14,6 @@ from utils import init, get_clones
 
 
 class EmbedConv(MessagePassing):
-    """
-    Message-passing layer that embeds entity types and concatenates with node
-    features and edge attributes before passing through linear layers.
-    """
-
     def __init__(
         self,
         input_dim: int,
@@ -78,8 +68,8 @@ class EmbedConv(MessagePassing):
         return self.propagate(edge_index=edge_index, x=x, edge_attr=edge_attr)
 
     def message(self, x_j: Tensor, edge_attr: Optional[Tensor]):
-        node_feat_j = x_j[:, :-1]  # strip entity_type from end
-        entity_type_j = x_j[:, -1].long()  # last feature is entity type
+        node_feat_j = x_j[:, :-1]
+        entity_type_j = x_j[:, -1].long()
         entity_embed_j = self.entity_embed(entity_type_j)
 
         if edge_attr is not None:
@@ -98,11 +88,6 @@ class EmbedConv(MessagePassing):
 
 
 class TransformerConvNet(nn.Module):
-    """
-    Processes a batched graph through EmbedConv → TransformerConv layers.
-    Supports 'node' aggregation (ego-node feature) or 'global' pool.
-    """
-
     def __init__(
         self,
         input_dim: int,
@@ -133,7 +118,6 @@ class TransformerConvNet(nn.Module):
         self.graph_aggr = graph_aggr
         self.global_aggr_type = global_aggr_type
 
-        # input_dim - 1 because last feature is entity_type (used for embedding)
         self.embed_layer = EmbedConv(
             input_dim=input_dim - 1,
             num_embeddings=num_embeddings,
@@ -195,10 +179,6 @@ class TransformerConvNet(nn.Module):
 
     @staticmethod
     def process_adj(adj: Tensor, max_edge_dist: float) -> Tuple[Tensor, Tensor]:
-        """
-        Filter adj matrix by max_edge_dist and convert to edge_index + edge_attr.
-        adj: (batch_size, num_nodes, num_nodes) OR (num_nodes, num_nodes)
-        """
         assert adj.dim() in (2, 3)
         assert adj.size(-1) == adj.size(-2)
 
@@ -220,11 +200,6 @@ class TransformerConvNet(nn.Module):
 
 
 class GNNBase(nn.Module):
-    """
-    Wrapper around TransformerConvNet.
-    Accepts (node_obs, adj, agent_id) and returns ego-node or global features.
-    """
-
     def __init__(
         self,
         args,
@@ -255,7 +230,7 @@ class GNNBase(nn.Module):
             embed_add_self_loop=args.embed_add_self_loop,
             max_edge_dist=args.max_edge_dist,
         )
-        # out_dim: hidden_size (heads averaged, concat_heads=False)
+
         self.out_dim = args.gnn_hidden_size * (args.gnn_num_heads if args.gnn_concat_heads else 1)
 
     def forward(self, node_obs: Tensor, adj: Tensor, agent_id: Tensor) -> Tensor:

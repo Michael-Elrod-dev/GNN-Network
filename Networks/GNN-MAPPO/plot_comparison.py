@@ -1,15 +1,3 @@
-"""
-plot_comparison.py  –  Overlays live MAPPO results on hard-coded GNN / DQN curves.
-
-Hard-coded values are read directly from the original Screenshot.png.
-
-Usage:
-    python plot_comparison.py                   # 10 eval episodes, latest checkpoint
-    python plot_comparison.py --episodes 20     # smoother average
-    python plot_comparison.py --episode 500     # specific checkpoint
-    python plot_comparison.py --output out.png  # custom save path
-"""
-
 import sys
 import argparse
 import numpy as np
@@ -27,22 +15,12 @@ from minigrid.environment import MultiGridEnv
 from minigrid.world import Agent
 
 
-# ---------------------------------------------------------------------------
-# Hard-coded reference curves (digitised from Screenshot.png)
-# ---------------------------------------------------------------------------
-
-# DQN: staircase rise, flat at ~30% from step 30 onward
 DQN_STEPS = [0, 5, 10, 15, 20, 25, 30, 50, 100, 150, 200]
 DQN_PCT = [0, 4, 8, 15, 20, 25, 30, 30, 30, 30, 30]
 
-# GNN: rapid sigmoid rise, asymptotes ~79%
+
 GNN_STEPS = [0, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 125, 150, 175, 200]
 GNN_PCT = [0, 15, 30, 45, 55, 62, 66, 70, 72, 74, 75, 76, 77, 78, 79]
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def parse_args():
@@ -92,11 +70,6 @@ def load_actor(args, device, episode=None):
 
 
 def run_episode(actor, env, args, device, temperature=0.5):
-    """
-    Run one headless episode and return a per-timestep goal-achievement array.
-    Uses info["goals_collected"] at episode end to avoid reading env.num_collected
-    after the internal auto-reset zeroes it.
-    """
     A = args.num_agents
     ag_id = np.arange(A, dtype=np.int32).reshape(A, 1)
     rnn_states = np.zeros((A, args.recurrent_N, args.hidden_size), dtype=np.float32)
@@ -120,8 +93,6 @@ def run_episode(actor, env, args, device, temperature=0.5):
         actions_np = actions.cpu().numpy().flatten().astype(np.int32)
         obs, node_obs, adj, _rewards, dones, info = env.step(actions_np)
 
-        # When episode ends, env auto-resets and zeros num_collected,
-        # so read from info instead.
         if info:
             pct = info["goals_collected"] / args.num_goals * 100
         else:
@@ -129,17 +100,11 @@ def run_episode(actor, env, args, device, temperature=0.5):
         curve.append(pct)
 
         if dones.all():
-            # Pad remaining steps with the final value
             final = curve[-1]
             curve.extend([final] * (args.episode_length - len(curve)))
             break
 
     return np.array(curve[: args.episode_length])
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 
 def main():
@@ -167,7 +132,6 @@ def main():
     mappo_plot = np.mean(curves, axis=0)
     mappo_label = "GNN-MAPPO"
 
-    # --- Save MAPPO curve to text file ---
     csv_path = Path(cli.output).stem + "_data.csv"
     with open(csv_path, "w") as f:
         f.write("step,goal_pct\n")
@@ -175,7 +139,6 @@ def main():
             f.write(f"{s},{round(v)}\n")
     print(f"Data  → {csv_path}")
 
-    # --- Plot ---
     fig, ax = plt.subplots(figsize=(10, 5))
 
     ax.plot(DQN_STEPS, DQN_PCT, color="#1f77b4", linestyle="-", linewidth=1.5, label="DQN")

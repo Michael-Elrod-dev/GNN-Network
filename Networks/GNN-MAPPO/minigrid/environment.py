@@ -12,8 +12,7 @@ from utils import Actions, COLOR_NAMES, TILE_PIXELS
 
 T = TypeVar("T")
 
-# Number of node features per entity:
-#   rel_pos (2) + 3 * rel_goal_pos (6) + entity_type (1) = 9
+
 NODE_FEAT_DIM = 9
 
 
@@ -30,7 +29,6 @@ class MultiGridEnv(gym.Env):
         self.render_size = None
         self.gamma = args.gamma
 
-        # Environment configuration
         self.entities = []
         self.step_count = 0
         self.num_collected = 0
@@ -42,20 +40,17 @@ class MultiGridEnv(gym.Env):
         self.max_steps = args.episode_length
         self.num_obstacles = args.num_obstacles
         self.max_edge_dist = args.max_edge_dist
-        self.full_features = False  # Use compact 9-feature node obs
+        self.full_features = False
         self.grid = Grid(self.width, self.height)
 
-        # Rendering attributes
         self.highlight = True
         self.tile_size = TILE_PIXELS
         self.window_name = "Custom MiniGrid"
 
-        # Dummy goal for missing slots (cur_pos=(0,0) avoids inf in obs)
         self.dummy_goal = Goal()
         self.dummy_goal.cur_pos = (0, 0)
         self.dummy_goal.collected = False
 
-        # Reward values
         self.reward_goal = args.reward_goal
         self.penalty_obstacle = args.penalty_obstacle
         self.penalty_goal = args.penalty_goal
@@ -64,13 +59,11 @@ class MultiGridEnv(gym.Env):
         self.seen_cells = np.zeros((self.width, self.height), dtype=bool)
         self.total_cells = self.width * self.height - 2 * self.width - 2 * self.height + 4
 
-        # Derived sizes
         num_agents = args.num_agents
         num_goals = args.num_goals
-        num_entities = num_agents + num_goals  # obstacles excluded (num_obstacles=0)
+        num_entities = num_agents + num_goals
 
-        # Gym Space attributes (required by env_wrappers)
-        obs_dim = 8  # agent_pos(2) + goal1_pos(2) + goal2_pos(2) + goal3_pos(2)
+        obs_dim = 8
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32)
         self.share_observation_space = gym.spaces.Box(
             low=-np.inf, high=np.inf, shape=(num_agents * obs_dim,), dtype=np.float32
@@ -139,13 +132,10 @@ class MultiGridEnv(gym.Env):
             for agent, pos in zip(self.agents, positions):
                 self._place_agent(agent, pos[0], pos[1])
 
-        # Place goals (appended to entities after agents)
         for _ in range(self.num_goals):
             obj = Goal()
             self._place_object(obj)
             self.entities.append(obj)
-
-        # num_obstacles == 0 in standard config
 
     def _place_agent(self, agent, x: int, y: int) -> None:
         agent.init_pos = (x, y)
@@ -194,7 +184,6 @@ class MultiGridEnv(gym.Env):
         num_agents = len(self.agents)
         num_goals = len(self.goals)
 
-        # Find goals within FOV
         goals_in_fov = []
         for goal_id in range(num_goals):
             goal = self.goals[goal_id]
@@ -207,11 +196,9 @@ class MultiGridEnv(gym.Env):
         goals_in_fov.sort(key=lambda x: x[1])
         goals_in_fov = goals_in_fov[:3]
 
-        # Fill remaining with dummy goals (cur_pos=(0,0))
         while len(goals_in_fov) < 3:
             goals_in_fov.append((self.dummy_goal, 1e9))
 
-        # Check if tracked goals have been collected
         if agent.goal1 is not None and agent.goal1.collected:
             agent.goal1 = self.dummy_goal
         if agent.goal2 is not None and agent.goal2.collected:
@@ -256,8 +243,6 @@ class MultiGridEnv(gym.Env):
             if agent.goal3 is None:
                 agent.goal3 = self.dummy_goal
 
-        # Relative offsets from agent position → translation-invariant directional signal.
-        # (0, 0) when no goal is tracked (dummy or None).
         agent_pos = agent.cur_pos
         for g in [agent.goal1, agent.goal2, agent.goal3]:
             if g is None or g is self.dummy_goal:
@@ -278,7 +263,7 @@ class MultiGridEnv(gym.Env):
             entity_features = []
             entity_pos = entity.cur_pos
             rel_pos = [entity_pos[0] - agent_pos[0], entity_pos[1] - agent_pos[1]]
-            entity_features.extend(rel_pos)  # 2 features
+            entity_features.extend(rel_pos)
 
             if entity.type == "agent":
                 other_agent_goals = [entity.goal1, entity.goal2, entity.goal3]
@@ -287,17 +272,15 @@ class MultiGridEnv(gym.Env):
                         rel_goal_pos = [goal.cur_pos[0] - agent_pos[0], goal.cur_pos[1] - agent_pos[1]]
                     else:
                         rel_goal_pos = [0, 0]
-                    entity_features.extend(rel_goal_pos)  # 2 features each
+                    entity_features.extend(rel_goal_pos)
             else:
-                # For non-agents, repeat rel_pos 3 times
                 for _ in range(3):
-                    entity_features.extend(rel_pos)  # 2 features each
+                    entity_features.extend(rel_pos)
 
-            # Entity type: 0=agent, 1=goal, 2=obstacle
             entity_features.append(0 if entity.type == "agent" else (1 if entity.type == "goal" else 2))
             features.append(entity_features)
 
-        result = np.array(features, dtype=np.float32)  # shape (num_entities, 9)
+        result = np.array(features, dtype=np.float32)
         return result
 
     def _update_seen_cells(self) -> None:
@@ -379,7 +362,7 @@ class MultiGridEnv(gym.Env):
                 "goals_percentage": (self.num_collected / self.num_goals) * 100,
                 "seen_percentage": seen_percentage,
             }
-            # Auto-reset: regenerate grid and return new episode's first obs
+
             self._auto_reset()
         else:
             info = {}

@@ -1,23 +1,9 @@
-"""
-Graph-environment vectorized wrappers.
-Adapted from InforMARL/onpolicy/envs/env_wrappers.py.
-
-Our env.reset() returns: (obs, node_obs, adj)
-Our env.step()  returns: (obs, node_obs, adj, rewards, dones, info)
-
-The wrappers inject agent_id (fixed arange) so callers see:
-  reset → (obs, ag_id, node_obs, adj)
-  step  → (obs, ag_id, node_obs, adj, rewards, dones, infos)
-"""
-
 import numpy as np
 from multiprocessing import Process, Pipe
 from abc import ABC, abstractmethod
 
 
 class CloudpickleWrapper:
-    """Uses cloudpickle to serialize env factory (multiprocessing requires picklable objects)."""
-
     def __init__(self, x):
         self.x = x
 
@@ -72,14 +58,6 @@ class ShareVecEnv(ABC):
 
 
 def graphworker(remote, parent_remote, env_fn_wrapper):
-    """Subprocess worker for graph environments.
-
-    env.reset() → (obs, node_obs, adj)
-    env.step()  → (obs, node_obs, adj, rewards, dones, info)
-
-    Worker computes a fixed ag_id = arange(n_agents).reshape(-1,1) and injects it.
-    env auto-resets internally on episode end, so no manual reset needed here.
-    """
     parent_remote.close()
     env = env_fn_wrapper.x()
     ag_id = None
@@ -124,8 +102,6 @@ def graphworker(remote, parent_remote, env_fn_wrapper):
 
 
 class GraphSubprocVecEnv(ShareVecEnv):
-    """Vectorized graph env using subprocesses (one per env)."""
-
     def __init__(self, env_fns, spaces=None):
         self.waiting = False
         self.closed = False
@@ -203,8 +179,6 @@ class GraphSubprocVecEnv(ShareVecEnv):
 
 
 class GraphDummyVecEnv(ShareVecEnv):
-    """Single-process graph env wrapper (for debugging / n_rollout_threads=1)."""
-
     def __init__(self, env_fns):
         self.envs = [fn() for fn in env_fns]
         env = self.envs[0]

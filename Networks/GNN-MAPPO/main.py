@@ -1,14 +1,7 @@
-"""
-Entry point for GNN-MAPPO training.
-
-IMPORTANT: The `if __name__ == "__main__"` guard is mandatory on Windows
-because multiprocessing uses "spawn" mode (not "fork").
-"""
-
 import sys
 from pathlib import Path
 
-# Ensure GNN-MAPPO/ is on the path so all local imports resolve correctly.
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 import random
@@ -22,12 +15,10 @@ from runner import Runner
 def main():
     args = Args()
 
-    # Reproducibility
     torch.manual_seed(args.seed)
     np.random.seed(args.seed % (2**31))
     random.seed(args.seed)
 
-    # Device
     if args.device == "cuda" and torch.cuda.is_available():
         args.device = torch.device("cuda")
         torch.cuda.manual_seed_all(args.seed)

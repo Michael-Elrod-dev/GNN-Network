@@ -42,4 +42,7 @@ output_*.log
 
 # SLURM
 slurm-*.out
-InforMARL/
+.claude/
+*.txt
+*.csv
+*.png

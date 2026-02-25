@@ -1,12 +1,3 @@
-"""
-GR_MAPPOPolicy: wraps GR_Actor + GR_Critic with Adam optimizers.
-Adapted from InforMARL/onpolicy/algorithms/graph_MAPPOPolicy.py.
-
-Key changes vs. original:
-  - gym.Space args replaced with explicit int dims.
-  - AMP / scaler removed.
-"""
-
 import torch
 from torch.optim import Adam
 
@@ -15,19 +6,6 @@ from utils import update_linear_schedule
 
 
 class GR_MAPPOPolicy:
-    """
-    Policy class for GR-MAPPO.
-
-    Args:
-        args:          hyperparameter namespace
-        obs_dim:       local observation dim (8)
-        cent_obs_dim:  centralized obs dim (64)
-        node_obs_dim:  per-entity node feature dim (9)
-        edge_dim:      edge attribute dim (1)
-        action_dim:    number of discrete actions (4)
-        device:        torch device
-    """
-
     def __init__(
         self,
         args,
@@ -85,7 +63,6 @@ class GR_MAPPOPolicy:
         )
 
     def lr_decay(self, episode: int, episodes: int):
-        """Linear lr decay."""
         update_linear_schedule(self.actor_optimizer, episode, episodes, self.lr)
         update_linear_schedule(self.critic_optimizer, episode, episodes, self.critic_lr)
 
@@ -103,7 +80,6 @@ class GR_MAPPOPolicy:
         deterministic: bool = False,
         temperature: float = 1.0,
     ):
-        """Collect rollout: sample actions + values."""
         actions, action_log_probs, rnn_states_actor = self.actor(
             obs,
             node_obs,
@@ -134,7 +110,6 @@ class GR_MAPPOPolicy:
         rnn_states_critic,
         masks,
     ):
-        """Compute bootstrap value for last step."""
         values, _ = self.critic(
             cent_obs,
             node_obs,
@@ -159,7 +134,6 @@ class GR_MAPPOPolicy:
         available_actions=None,
         active_masks=None,
     ):
-        """Evaluate actions for PPO update (returns log_probs, entropy, values)."""
         action_log_probs, dist_entropy = self.actor.evaluate_actions(
             obs,
             node_obs,
@@ -193,7 +167,6 @@ class GR_MAPPOPolicy:
         deterministic: bool = False,
         temperature: float = 1.0,
     ):
-        """Deterministic or stochastic action (no critic)."""
         actions, _, rnn_states_actor = self.actor(
             obs,
             node_obs,

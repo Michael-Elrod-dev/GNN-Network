@@ -1,11 +1,3 @@
-"""
-Utility module for GNN-MAPPO.
-Contains:
-  - Environment constants (Colors, Object types, Actions)
-  - Neural network utilities (init, get_clones, check, _t2n)
-  - Training utilities (ValueNorm, huber_loss, update_linear_schedule, etc.)
-"""
-
 import copy
 import math
 import numpy as np
@@ -15,9 +7,6 @@ from numpy import ndarray as arr
 from typing import Tuple, Optional, Union
 from enum import IntEnum
 
-# ---------------------------------------------------------------------------
-# Environment Constants
-# ---------------------------------------------------------------------------
 
 TILE_PIXELS = 32
 
@@ -98,11 +87,6 @@ class Actions(IntEnum):
     down = 3
 
 
-# ---------------------------------------------------------------------------
-# Neural Network Utilities
-# ---------------------------------------------------------------------------
-
-
 def init(module: nn.Module, weight_init, bias_init, gain: float = 1):
     weight_init(module.weight.data, gain=gain)
     bias_init(module.bias.data)
@@ -148,14 +132,7 @@ def update_linear_schedule(optimizer, epoch: int, total_num_epochs: int, initial
         param_group["lr"] = lr
 
 
-# ---------------------------------------------------------------------------
-# ValueNorm
-# ---------------------------------------------------------------------------
-
-
 class ValueNorm(nn.Module):
-    """Normalize a vector of observations across the first norm_axes dimensions."""
-
     def __init__(
         self,
         input_shape,

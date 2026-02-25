@@ -1,16 +1,3 @@
-"""
-Visual demo of a trained GNN-MAPPO policy.
-
-Loads the latest saved actor checkpoint and runs it on a single environment
-with a pygame render window. Policy runs deterministically (no exploration).
-
-Usage:
-    python demo.py                          # latest checkpoint
-    python demo.py --episode 500           # specific checkpoint episode
-    python demo.py --delay 0.05            # faster (default 0.1s per step)
-    python demo.py --episodes 5            # run N episodes then exit
-"""
-
 import sys
 import time
 import argparse
@@ -43,7 +30,6 @@ def parse_args():
 
 
 def load_actor(args, device, episode=None):
-    """Load the actor from checkpoint."""
     checkpoint_dir = Path("checkpoints") / args.title
     if not checkpoint_dir.exists():
         raise FileNotFoundError(f"No checkpoints found at {checkpoint_dir}")
@@ -53,7 +39,6 @@ def load_actor(args, device, episode=None):
         if not path.exists():
             raise FileNotFoundError(f"No checkpoint for episode {episode}")
     else:
-        # Find latest
         files = sorted(checkpoint_dir.glob("actor_ep*.pt"), key=lambda p: int(p.stem.split("ep")[1]))
         if not files:
             raise FileNotFoundError(f"No actor checkpoints in {checkpoint_dir}")
@@ -75,7 +60,6 @@ def load_actor(args, device, episode=None):
 
 
 def draw_stats(window, font, step, goals_collected, num_goals, episode, total_episodes):
-    """Draw a semi-transparent stats bar at the bottom of the window."""
     W, H = window.get_size()
     bar_h = 36
     bar = pygame.Surface((W, bar_h), pygame.SRCALPHA)
@@ -101,17 +85,14 @@ def main():
     print(f"Device: {args.device}")
     actor = load_actor(args, device, episode=cli.episode)
 
-    # Build a single env on the main thread (required for pygame)
     agents = [Agent(id=i, args=args) for i in range(args.num_agents)]
     env = MultiGridEnv(args, agents)
 
-    # Fixed agent_id and rnn/mask placeholders
     A = args.num_agents
     ag_id = np.arange(A, dtype=np.int32).reshape(A, 1)
     rnn_states = np.zeros((A, args.recurrent_N, args.hidden_size), dtype=np.float32)
     masks = np.ones((A, 1), dtype=np.float32)
 
-    # Init pygame font (after first render_env creates the window)
     pygame.init()
     font = pygame.font.SysFont("monospace", 15, bold=True)
 
@@ -119,16 +100,12 @@ def main():
 
     for ep in range(cli.episodes):
         obs, node_obs, adj = env.reset()
-        # obs:      (A, 8)
-        # node_obs: (A, 51, 9)
-        # adj:      (A, 51, 51)
 
         ep_goals = 0
         ep_steps = 0
         env.render_env()
 
         for step in range(args.episode_length):
-            # Check for pygame quit event
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     env.close()
@@ -139,7 +116,6 @@ def main():
                     pygame.quit()
                     sys.exit()
 
-            # Get actions from policy
             with torch.no_grad():
                 actions, _, _ = actor(
                     obs,
@@ -151,7 +127,7 @@ def main():
                     deterministic=cli.deterministic,
                     temperature=cli.temperature,
                 )
-            actions_np = actions.cpu().numpy().flatten().astype(np.int32)  # (A,)
+            actions_np = actions.cpu().numpy().flatten().astype(np.int32)
 
             obs, node_obs, adj, rewards, dones, info = env.step(actions_np)
 
@@ -161,7 +137,6 @@ def main():
 
             env.render_env()
 
-            # Draw stats overlay
             if env.window is not None:
                 draw_stats(
                     env.window,

@@ -1,13 +1,3 @@
-"""
-GR_MAPPO: PPO gradient update for graph-based MAPPO.
-Adapted from InforMARL/onpolicy/algorithms/graph_mappo.py.
-
-Key changes vs. original:
-  - AMP / GradScaler removed; plain .backward() / .step().
-  - Only feed_forward_generator path (no recurrent generators).
-  - ValueNorm from utils.py.
-"""
-
 import torch
 import torch.nn as nn
 from typing import Optional
@@ -16,15 +6,6 @@ from utils import ValueNorm, get_grad_norm, huber_loss, mse_loss, check
 
 
 class GR_MAPPO:
-    """
-    PPO trainer for GR-MAPPO.
-
-    Args:
-        args:    hyperparameter namespace
-        policy:  GR_MAPPOPolicy
-        device:  torch device
-    """
-
     def __init__(self, args, policy, device=torch.device("cpu")):
         self.device = device
         self.tpdv = dict(dtype=torch.float32, device=device)
@@ -56,12 +37,7 @@ class GR_MAPPO:
         else:
             self.value_normalizer = None
 
-    # ------------------------------------------------------------------
-    # Value loss
-    # ------------------------------------------------------------------
-
     def cal_value_loss(self, values, value_preds_batch, return_batch, active_masks_batch):
-        """Huber or MSE loss on normalized returns."""
         value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
 
         if self._use_valuenorm:
@@ -91,12 +67,7 @@ class GR_MAPPO:
 
         return value_loss
 
-    # ------------------------------------------------------------------
-    # Single PPO update step
-    # ------------------------------------------------------------------
-
     def ppo_update(self, sample, update_actor: bool = True):
-        """One mini-batch PPO gradient step. Returns losses and grad norms."""
         (
             share_obs_batch,
             obs_batch,
@@ -116,7 +87,7 @@ class GR_MAPPO:
 
         old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
         advantages = check(return_batch).to(**self.tpdv) - check(value_preds_batch).to(**self.tpdv)
-        # advantages normalised across the mini-batch
+
         advantages_copy = advantages.clone()
         if self._use_value_active_masks:
             active = check(active_masks_batch).to(**self.tpdv)
@@ -139,7 +110,6 @@ class GR_MAPPO:
             check(active_masks_batch).to(**self.tpdv) if self._use_policy_active_masks else None,
         )
 
-        # --- Actor loss ---
         ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
         surr1 = ratio * advantages
         surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * advantages
@@ -165,7 +135,6 @@ class GR_MAPPO:
                 actor_grad_norm = get_grad_norm(self.policy.actor.parameters())
             self.policy.actor_optimizer.step()
 
-        # --- Critic loss ---
         value_loss = self.cal_value_loss(
             values,
             check(value_preds_batch).to(**self.tpdv),
@@ -190,15 +159,7 @@ class GR_MAPPO:
             ratio,
         )
 
-    # ------------------------------------------------------------------
-    # Full training pass over buffer
-    # ------------------------------------------------------------------
-
     def train(self, buffer, update_actor: bool = True):
-        """
-        Iterate over buffer with feed_forward_generator for ppo_epoch epochs.
-        Returns dict of averaged losses/metrics.
-        """
         if self._use_valuenorm:
             advantages = buffer.returns[:-1] - self.value_normalizer.denormalize(buffer.value_preds[:-1])
         else:
